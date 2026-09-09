@@ -18,16 +18,20 @@ export function middleware(request: NextRequest) {
     }
   }
 
-  // 2. Subdomain Extraction (e.g. balod.scantoprint.in -> balod)
+  // 2. Subdomain Routing (Only for custom domains, ignoring vercel.app & localhost)
   const currentHost = hostname.replace(`:${url.port}`, '');
+  
+  const isVercelDomain = currentHost.endsWith('.vercel.app');
   const isLocalhost = currentHost.includes('localhost');
-  const baseDomain = isLocalhost ? 'localhost' : 'scantoprint.in';
 
-  if (currentHost !== baseDomain && !currentHost.startsWith('www.')) {
-    const subdomain = currentHost.replace(`.${baseDomain}`, '');
-    // Rewrite balod.scantoprint.in to /shop/balod
-    if (subdomain && !pathname.startsWith('/api') && !pathname.startsWith('/_next')) {
-      return NextResponse.rewrite(new URL(`/shop/${subdomain}${pathname}`, request.url));
+  if (!isVercelDomain && !isLocalhost && !currentHost.startsWith('www.')) {
+    const parts = currentHost.split('.');
+    // If shop subdomain like balod.scantoprint.in (parts length >= 3)
+    if (parts.length > 2) {
+      const subdomain = parts[0];
+      if (subdomain && !pathname.startsWith('/api') && !pathname.startsWith('/_next') && !pathname.startsWith('/shop')) {
+        return NextResponse.rewrite(new URL(`/shop/${subdomain}${pathname}`, request.url));
+      }
     }
   }
 
