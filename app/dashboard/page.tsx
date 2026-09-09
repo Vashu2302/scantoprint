@@ -25,7 +25,6 @@ export default function ShopOwnerDashboard() {
   // Load shop details & jobs
   useEffect(() => {
     async function loadData() {
-      // 1. Fetch current active shop from cookie or database
       const cookies = document.cookie.split('; ');
       const authCookie = cookies.find((c) => c.startsWith('stp_auth_token='));
       let email = '';
@@ -62,7 +61,6 @@ export default function ShopOwnerDashboard() {
           colorDouble: shopData.color_double_rate || 8.0,
         });
 
-        // 2. Fetch jobs for this shop
         const { data: jobsData } = await supabase
           .from('print_jobs')
           .select('*')
@@ -76,7 +74,7 @@ export default function ShopOwnerDashboard() {
 
     loadData();
 
-    // 3. Realtime Listener for new Incoming Print Jobs
+    // Realtime Listener for new Incoming Print Jobs
     const channel = supabase
       .channel('realtime:shop_jobs')
       .on(
@@ -121,7 +119,7 @@ export default function ShopOwnerDashboard() {
     setSavingRates(false);
   };
 
-  // Generate Standee QR
+  // Generate Standee QR with bigger dimensions
   useEffect(() => {
     if (activeTab === 'standee' && shop) {
       const win = window as any;
@@ -131,8 +129,8 @@ export default function ShopOwnerDashboard() {
           const targetUrl = `https://${shop.slug || 'balod'}.scantoprint.in`;
           new win.QRCode(qrCardRef.current, {
             text: targetUrl,
-            width: 180,
-            height: 180,
+            width: 240,
+            height: 240,
           });
         }
       }, 100);
@@ -386,8 +384,8 @@ export default function ShopOwnerDashboard() {
                   left: 50% !important;
                   top: 50% !important;
                   transform: translate(-50%, -50%) !important;
-                  width: 360px !important;
-                  border: 3px solid #4f46e5 !important;
+                  width: 380px !important;
+                  border: 3.5px solid #4f46e5 !important;
                   box-shadow: none !important;
                   -webkit-print-color-adjust: exact !important;
                   print-color-adjust: exact !important;
@@ -395,12 +393,12 @@ export default function ShopOwnerDashboard() {
               }
             `}</style>
 
-            {/* Colored Standee Poster Card */}
+            {/* Standee Poster Card */}
             <div
               id="printable-standee"
               className="w-full max-w-sm bg-white text-slate-900 rounded-[2.5rem] border-4 border-indigo-600 shadow-2xl overflow-hidden relative"
             >
-              {/* Header with ScanToPrint Logo & Shop Name */}
+              {/* Top Indigo Brand Header */}
               <div className="bg-gradient-to-br from-indigo-600 to-indigo-700 p-6 text-white text-center relative">
                 <div className="inline-flex items-center justify-center h-12 w-12 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 text-white font-black text-xl mb-2 shadow-inner">
                   STP
@@ -416,48 +414,36 @@ export default function ShopOwnerDashboard() {
                 </p>
               </div>
 
-              {/* QR Code in Center with "Scan Me to Pay" Tag */}
-              <div className="p-6 flex flex-col items-center justify-center bg-white space-y-3">
-                <span className="text-[11px] font-extrabold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-4 py-1.5 rounded-full border border-indigo-100">
-                  📱 Scan Me to Pay &amp; Print
+              {/* QR Code in Center (Enlarged) */}
+              <div className="p-8 flex flex-col items-center justify-center bg-white space-y-4">
+                <span className="text-xs font-black uppercase tracking-wider text-indigo-600 bg-indigo-50 px-5 py-2 rounded-full border border-indigo-100 shadow-sm">
+                  📱 Scan Me to Print
                 </span>
 
-                <div className="p-3 bg-white rounded-3xl border-2 border-indigo-100 shadow-lg shadow-indigo-100/50 flex items-center justify-center">
+                <div className="p-4 bg-white rounded-3xl border-2 border-indigo-100 shadow-xl shadow-indigo-100/60 flex items-center justify-center">
                   <div ref={qrCardRef} className="p-1" />
                 </div>
 
-                <p className="text-[11px] text-slate-500 font-semibold">
-                  Scan with Camera or Any UPI / QR App
+                <p className="text-xs text-slate-500 font-bold">
+                  Scan with Camera or Any UPI App
                 </p>
               </div>
 
-              {/* Pricing Grid */}
-              <div className="mx-6 p-3.5 bg-slate-50 rounded-2xl border border-slate-100 text-xs font-bold text-slate-700 space-y-1.5">
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-500">B&amp;W (Single / Back-to-Back):</span>
-                  <span className="font-mono text-indigo-600 font-black">₹{rates.bwSingle} / ₹{rates.bwDouble}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-500">Color (Single / Back-to-Back):</span>
-                  <span className="font-mono text-indigo-600 font-black">₹{rates.colorSingle} / ₹{rates.colorDouble}</span>
-                </div>
-              </div>
-
-              {/* Down Corner Website Advertisement */}
-              <div className="p-4 bg-slate-900 text-white text-center mt-6">
-                <div className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">
+              {/* Large Website Advertisement Banner */}
+              <div className="p-6 bg-slate-950 text-white text-center border-t border-slate-800">
+                <div className="text-[11px] text-slate-400 uppercase tracking-widest font-bold">
                   Powered &amp; Secured by
                 </div>
-                <div className="text-xs font-black text-indigo-400 tracking-wide font-mono mt-0.5">
+                <div className="text-xl font-black text-indigo-400 tracking-wider font-mono mt-1">
                   scantoprint.in
                 </div>
-                <div className="text-[9px] text-slate-500 mt-0.5 font-mono">
+                <div className="text-[11px] text-slate-400 mt-1 font-mono font-medium">
                   {shop?.slug}.scantoprint.in
                 </div>
               </div>
             </div>
 
-            {/* Clean Print Button */}
+            {/* Print Trigger Button */}
             <button
               onClick={() => window.print()}
               className="no-print px-8 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black uppercase tracking-wider rounded-2xl shadow-xl shadow-indigo-600/30 transition-all flex items-center gap-2"
