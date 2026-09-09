@@ -26,17 +26,14 @@ export function middleware(request: NextRequest) {
   if (!isVercelDomain && !isLocalhost && !currentHost.startsWith('www.')) {
     const parts = currentHost.split('.');
     
-    // If shop subdomain like vashu-prints.scantoprint.in
+    // Check if on shop subdomain (e.g. vashu-prints.scantoprint.in)
     if (parts.length > 2) {
       const subdomain = parts[0];
 
-      // Agar customer root par hai ('/'), toh shop landing page rewrite karo
+      // QR Scan karte hi bina kisi intermediate page ke direct /upload render hoga
       if (pathname === '/') {
-        return NextResponse.rewrite(new URL(`/shop/${subdomain}`, request.url));
+        return NextResponse.rewrite(new URL(`/upload?shop_slug=${subdomain}`, request.url));
       }
-
-      // Agar customer kisi common page par ja raha hai jaise /upload, toh use bina /shop/ ke direct access karne do
-      // No rewrite needed, Next.js will naturally serve app/upload/page.tsx
     }
   }
 
