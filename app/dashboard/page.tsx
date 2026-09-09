@@ -1,230 +1,220 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import Link from 'next/link';
-import Script from 'next/script';
-import { supabase } from '@/lib/supabase';
+import { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
 
-interface PrintJob {
-  id: string;
-  file_name: string;
-  color_mode: string;
-  side_mode: string;
-  pages_per_sheet: number;
-  copies: number;
-  total_amount: number;
-  status: string;
-  created_at: string;
-}
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 export default function ShopDashboard() {
-  const [jobs, setJobs] = useState<PrintJob[]>([]);
-  const [showPoster, setShowPoster] = useState(false);
-  const posterQrRef = useRef<HTMLDivElement | null>(null);
+  const [shop, setShop] = useState<any>(null);
+  const [jobs, setJobs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchJobs();
+    async function loadShopData() {
+      // 1. Get logged-in shop identifier from cookie
+      const cookies = document.cookie.split('; ');
+      const authCookie = cookies.find((c) => c.startsWith('stp_auth_token='));
+      let email = '';
 
-    const channel = supabase
-      .channel('realtime:print_jobs')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'print_jobs' },
-        (payload) => {
-          setJobs((prev) => [payload.new as PrintJob, ...prev]);
+      if (authCookie) {
+        const val = authCookie.split('=')[1];
+        if (val.startsWith('shop_')) {
+          email = decodeURIComponent(val.replace('shop_', ''));
         }
-      )
-      .subscribe();
+      }
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+      // 2. Fetch Shop Details from Supabase
+      let currentShop = null;
+      if (email) {
+        const { data } = await supabase
+          .from('shops')
+          .select('*')
+          .eq('email', email)
+          .single();
+        currentShop = data;
+      }
+
+      // Fallback: Agar cookie se email na mile toh latest active shop le lo
+      if (!currentShop) {
+        const { data } = await supabase
+          .from('shops')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+        currentShop = data;
+      }
+
+      if (currentShop) {
+        setShop(currentShop);
+
+        // 3. Fetch Real Print Jobs for this specific shop
+        const { data: jobData } = await supabase
+          .from('print_jobs')
+          .select('*')
+          .eq('shop_id', currentShop.id)
+          .order('created_at', { ascending: false });
+
+        if (jobData) {
+          setJobs(jobData);
+        }
+      }
+
+      setLoading(false);
+    }
+
+    loadShopData();
   }, []);
 
-  const fetchJobs = async () => {
-    const { data } = await supabase
-      .from('print_jobs')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (data) setJobs(data as PrintJob[]);
+  const handleLogout = () => {
+    document.cookie = 'stp_auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+    window.location.href = '/login';
   };
 
-  const openPosterModal = () => {
-    setShowPoster(true);
-    setTimeout(() => {
-      const win = window as any;
-      if (posterQrRef.current && win.QRCode) {
-        posterQrRef.current.innerHTML = '';
-        // Customer mobile scan destination URL
-        const uploadUrl = `${window.location.origin}/upload`;
-        new win.QRCode(posterQrRef.current, {
-          text: uploadUrl,
-          width: 220,
-          height: 220,
-        });
-      }
-    }, 100);
-  };
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#070b14] flex items-center justify-center text-slate-400 text-sm">
+        Loading Shop Dashboard...
+      </div>
+    );
+  }
 
-  const totalRevenue = jobs.reduce((acc, job) => acc + Number(job.total_amount || 0), 0);
+  if (!shop) {
+    return (
+      <div className="min-h-screen bg-[#070b14] flex flex-col items-center justify-center text-white p-4">
+        <h2 className="text-xl font-bold mb-2">No Shop Found</h2>
+        <p className="text-xs text-slate-400 mb-4">Please login with a valid registered shop email.</p>
+        <button onClick={handleLogout} className="px-4 py-2 bg-indigo-600 rounded-xl text-xs font-bold">
+          Back to Login
+        </button>
+      </div>
+    );
+  }
+
+  // Calculate live stats
+  const totalPrints = jobs.length;
+  const completedJobs = jobs.filter((j) => j.status === 'printed' || j.status === 'completed').length;
+  const pendingJobs = jobs.filter((j) => j.status === 'queued' || j.status === 'processing').length;
+  const totalRevenue = jobs.reduce((sum, j) => sum + (Number(j.amount) || 0), 0);
 
   return (
-    <div className="min-h-screen bg-[#090d16] text-slate-100 flex flex-col">
-      <Script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" />
-
-      {/* Top Navbar */}
-      <header className="sticky top-0 z-50 backdrop-blur-xl bg-[#090d16]/80 border-b border-slate-800 px-6 py-4 flex items-center justify-between print:hidden">
-        <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-2xl bg-indigo-600 flex items-center justify-center font-black text-white shadow-md">
-            S
-          </div>
+    <div className="min-h-screen bg-[#070b14] text-slate-100 p-6 md:p-12">
+      <div className="max-w-6xl mx-auto space-y-8">
+        {/* Top Header */}
+        <div className="flex justify-between items-center border-b border-slate-800 pb-6">
           <div>
-            <h1 className="font-extrabold text-base text-white">Balod Central Xerox & Cyber</h1>
-            <span className="text-[11px] text-emerald-400 font-medium">● System Live & Listening</span>
+            <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest">
+              Store Dashboard
+            </span>
+            <h1 className="text-2xl font-black text-white">{shop.name}</h1>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Portal URL:{' '}
+              <a
+                href={`/shop/${shop.slug}`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-indigo-400 hover:underline font-mono"
+              >
+                {shop.slug}.scantoprint.in (/shop/{shop.slug})
+              </a>
+            </p>
           </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={openPosterModal}
-            className="text-xs font-bold px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white transition-all shadow-md shadow-indigo-600/30"
-          >
-            🖨️ Print Counter QR Poster
-          </button>
-          <Link
-            href="/upload"
-            target="_blank"
-            className="text-xs font-semibold px-4 py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-200 hover:text-white"
-          >
-            Open Portal ↗
-          </Link>
-          <Link href="/login" className="text-xs text-slate-400 hover:text-white ml-2">
-            Logout
-          </Link>
-        </div>
-      </header>
-
-      {/* Metrics Row */}
-      <main className="max-w-7xl mx-auto w-full px-6 py-8 space-y-8">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="p-6 rounded-3xl bg-[#0f172a]/70 border border-slate-800">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Collection</span>
-            <div className="text-3xl font-black text-white mt-2 font-mono">₹{totalRevenue.toFixed(2)}</div>
-            <p className="text-xs text-emerald-400 mt-2 font-medium">Synced instantly</p>
-          </div>
-
-          <div className="p-6 rounded-3xl bg-[#0f172a]/70 border border-slate-800">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Orders</span>
-            <div className="text-3xl font-black text-indigo-400 mt-2 font-mono">{jobs.length}</div>
-            <p className="text-xs text-slate-400 mt-2 font-medium">Received jobs</p>
-          </div>
-
-          <div className="p-6 rounded-3xl bg-[#0f172a]/70 border border-slate-800">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Desktop Agent</span>
-            <div className="text-3xl font-black text-emerald-400 mt-2">Active</div>
-            <p className="text-xs text-slate-400 mt-2 font-medium">Virtual spooler connected</p>
-          </div>
-
-          <div className="p-6 rounded-3xl bg-[#0f172a]/70 border border-slate-800">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Average Dispatch</span>
-            <div className="text-3xl font-black text-white mt-2 font-mono">0.3s</div>
-            <p className="text-xs text-emerald-400 mt-2 font-medium">Zero-queue delay</p>
-          </div>
-        </div>
-
-        {/* Live Jobs Table */}
-        <div className="p-6 sm:p-8 rounded-[2rem] bg-[#0f172a]/80 border border-slate-800 shadow-2xl backdrop-blur-xl">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-lg font-extrabold text-white">Live Print Queue</h2>
-              <p className="text-xs text-slate-400 mt-1">Realtime customer orders appear automatically.</p>
-            </div>
+          <div className="flex items-center gap-3">
             <button
-              onClick={fetchJobs}
-              className="text-xs font-semibold px-4 py-2 rounded-xl bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-300"
+              onClick={() => window.open(`/shop/${shop.slug}`, '_blank')}
+              className="px-4 py-2 bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 rounded-xl text-xs font-bold hover:bg-indigo-600/30 transition-all"
             >
-              🔄 Refresh
+              Open Shop QR Page
+            </button>
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2 bg-red-500/10 text-red-400 border border-red-500/20 rounded-xl text-xs font-bold hover:bg-red-500/20 transition-all"
+            >
+              Sign Out
             </button>
           </div>
-
-          {jobs.length === 0 ? (
-            <div className="py-12 text-center text-slate-500 text-xs">No orders in queue right now.</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-300">
-                <thead className="border-b border-slate-800 uppercase tracking-wider text-[10px] text-slate-400">
-                  <tr>
-                    <th className="pb-3 px-3">File Name</th>
-                    <th className="pb-3 px-3">Mode</th>
-                    <th className="pb-3 px-3">Side</th>
-                    <th className="pb-3 px-3">Layout</th>
-                    <th className="pb-3 px-3">Copies</th>
-                    <th className="pb-3 px-3">Amount</th>
-                    <th className="pb-3 px-3">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60 font-mono">
-                  {jobs.map((job) => (
-                    <tr key={job.id} className="hover:bg-slate-900/40 transition-colors">
-                      <td className="py-3.5 px-3 font-bold text-white max-w-[220px] truncate font-sans">
-                        📄 {job.file_name}
-                      </td>
-                      <td className="py-3.5 px-3">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          job.color_mode === 'bw' ? 'bg-slate-800 text-slate-300' : 'bg-violet-950 text-violet-300'
-                        }`}>
-                          {job.color_mode === 'bw' ? 'B & W' : 'Color'}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-3 uppercase text-[11px]">{job.side_mode}</td>
-                      <td className="py-3.5 px-3">{job.pages_per_sheet}-in-1</td>
-                      <td className="py-3.5 px-3 font-bold text-white">{job.copies}</td>
-                      <td className="py-3.5 px-3 font-bold text-emerald-400">₹{Number(job.total_amount).toFixed(2)}</td>
-                      <td className="py-3.5 px-3 font-sans">
-                        <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold">
-                          ● {job.status || 'Received'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
         </div>
-      </main>
 
-      {/* QR Standee Poster Modal */}
-      {showPoster && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white text-slate-900 rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl space-y-4">
-            <h3 className="text-xl font-black text-indigo-900 leading-tight">Balod Central Xerox</h3>
-            <p className="text-xs text-slate-600 font-semibold">Self-Service Instant Print Counter</p>
-            
-            <div className="border-4 border-indigo-600 p-4 rounded-2xl bg-white inline-block shadow-inner my-2">
-              <div ref={posterQrRef} />
-            </div>
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-[#0e1626] border border-slate-800 p-5 rounded-2xl">
+            <div className="text-slate-400 text-xs font-medium">Total Print Jobs</div>
+            <div className="text-2xl font-black text-white mt-2">{totalPrints}</div>
+          </div>
 
-            <p className="text-sm font-black text-slate-800">Scan QR Code to Upload & Print</p>
-            <p className="text-[11px] text-slate-500">Supports PDF, JPG, PNG with Live Preview</p>
+          <div className="bg-[#0e1626] border border-slate-800 p-5 rounded-2xl">
+            <div className="text-slate-400 text-xs font-medium">Completed Prints</div>
+            <div className="text-2xl font-black text-emerald-400 mt-2">{completedJobs}</div>
+          </div>
 
-            <div className="flex gap-2 pt-2">
-              <button
-                onClick={() => window.print()}
-                className="flex-1 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs"
-              >
-                Print Poster
-              </button>
-              <button
-                onClick={() => setShowPoster(false)}
-                className="py-3 px-4 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs"
-              >
-                Close
-              </button>
+          <div className="bg-[#0e1626] border border-slate-800 p-5 rounded-2xl">
+            <div className="text-slate-400 text-xs font-medium">Pending Queue</div>
+            <div className="text-2xl font-black text-amber-400 mt-2">{pendingJobs}</div>
+          </div>
+
+          <div className="bg-[#0e1626] border border-slate-800 p-5 rounded-2xl">
+            <div className="text-slate-400 text-xs font-medium">Shop UPI ID</div>
+            <div className="text-sm font-bold font-mono text-indigo-400 mt-2 truncate">
+              {shop.upi_id}
             </div>
           </div>
         </div>
-      )}
+
+        {/* Live Print Queue */}
+        <div className="bg-[#0e1626] border border-slate-800 rounded-2xl overflow-hidden">
+          <div className="p-4 border-b border-slate-800 flex justify-between items-center">
+            <h2 className="text-sm font-bold text-white uppercase tracking-wider">
+              Recent Print Jobs ({shop.name})
+            </h2>
+          </div>
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-900 text-slate-400 uppercase text-[10px] tracking-wider">
+              <tr>
+                <th className="p-4">File Name</th>
+                <th className="p-4">Pages / Copies</th>
+                <th className="p-4">Color Mode</th>
+                <th className="p-4">Status</th>
+                <th className="p-4">Time</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/60">
+              {jobs.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="p-8 text-center text-slate-500">
+                    No print jobs yet for {shop.name}. Customers can scan your QR code to print directly.
+                  </td>
+                </tr>
+              ) : (
+                jobs.map((job) => (
+                  <tr key={job.id} className="hover:bg-slate-900/40">
+                    <td className="p-4 font-semibold text-white truncate max-w-xs">{job.file_name}</td>
+                    <td className="p-4 text-slate-300">{job.page_count} pgs × {job.copies} copies</td>
+                    <td className="p-4 uppercase text-slate-400 font-medium">{job.color_mode}</td>
+                    <td className="p-4">
+                      <span
+                        className={`px-2 py-0.5 rounded-md font-bold text-[10px] ${
+                          job.status === 'printed' || job.status === 'completed'
+                            ? 'bg-emerald-500/10 text-emerald-400'
+                            : 'bg-amber-500/10 text-amber-400'
+                        }`}
+                      >
+                        {job.status}
+                      </span>
+                    </td>
+                    <td className="p-4 text-slate-400 font-mono">
+                      {new Date(job.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
