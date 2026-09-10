@@ -36,22 +36,25 @@ export default function HomePage() {
       {/* Hero Section */}
       <section className="max-w-5xl mx-auto px-6 pt-20 pb-16 text-center space-y-6">
         <h1 className="text-4xl sm:text-6xl font-black tracking-tight leading-tight">
-  <span className="text-white block">
-    Automated Document Printing
-  </span>
-  <span className="bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400 bg-clip-text text-transparent">
-    via Dynamic QR Codes
-  </span>
-</h1>
+          <span className="text-white block">
+            Automated Document Printing
+          </span>
+          <span className="bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400 bg-clip-text text-transparent">
+            via Dynamic QR Codes
+          </span>
+        </h1>
         <p className="text-sm sm:text-base text-slate-400 max-w-2xl mx-auto leading-relaxed">
           Empower photocopy and print shop owners with zero-touch order processing. Instant UPI payments, and local desktop print auto-sync on scantoprint.in.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
           <Link
-            href="/upload"
-            className="px-6 py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 font-extrabold text-sm text-white shadow-xl shadow-indigo-600/30 transition-all active:scale-95"
+            href="/register"
+            className="px-6 py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 font-extrabold text-sm text-white shadow-xl shadow-indigo-600/30 transition-all active:scale-95 flex items-center gap-2"
           >
-            Try Customer Portal ↗
+            <span>Automate Your Business</span>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+            </svg>
           </Link>
           <a
             href="#workflow"
