@@ -17,6 +17,7 @@ export default function VashuExactMerchantDashboard() {
   const [orders, setOrders] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'queue' | 'pricing' | 'standee'>('standee');
   const [loading, setLoading] = useState(true);
+  const [baseUrl, setBaseUrl] = useState('https://scantoprint.in');
 
   // Pricing State
   const [pricing, setPricing] = useState({
@@ -27,6 +28,12 @@ export default function VashuExactMerchantDashboard() {
   });
   const [savingRates, setSavingRates] = useState(false);
   const [ratesSaved, setRatesSaved] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setBaseUrl(window.location.origin);
+    }
+  }, []);
 
   useEffect(() => {
     async function fetchShopData(isSilent = false) {
@@ -139,7 +146,6 @@ export default function VashuExactMerchantDashboard() {
     window.print();
   };
 
-  // Download Latest .exe uploaded by admin
   const handleDownloadSoftware = () => {
     const { data } = supabase.storage.from('software').getPublicUrl('ScanToPrint.exe');
     if (data?.publicUrl) {
@@ -179,8 +185,10 @@ export default function VashuExactMerchantDashboard() {
 
   const shopTitle = shop.business_name || shop.name || 'Store';
   const shopInitial = shopTitle.trim().charAt(0).toUpperCase() || 'S';
-  const portalSubdomain = `${shop.slug}.scantoprint.in`;
-  const uploadPageUrl = `https://${portalSubdomain}`;
+
+  // FIX: Sahi upload URL jahan customer document upload karega
+  const uploadPageUrl = `${baseUrl}/shop/${shop.slug}`;
+  const displayPortalLink = `${shop.slug}.scantoprint.in`;
   const qrImageSource = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(uploadPageUrl)}`;
 
   const todayRevenue = orders
@@ -242,13 +250,12 @@ export default function VashuExactMerchantDashboard() {
           <div>
             <h1 className="font-bold text-base text-white leading-tight">{shopTitle}</h1>
             <p className="text-[11px] text-slate-400">
-              Counter Link: <span className="text-slate-400 hover:text-indigo-300 font-mono">{portalSubdomain}</span>
+              Counter Link: <a href={uploadPageUrl} target="_blank" rel="noreferrer" className="text-slate-400 hover:text-indigo-300 font-mono underline">{displayPortalLink}</a>
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          {/* 1. DOWNLOAD PC SOFTWARE BUTTON */}
           <button
             onClick={handleDownloadSoftware}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-500/40 shadow-sm transition-all cursor-pointer"
@@ -257,7 +264,6 @@ export default function VashuExactMerchantDashboard() {
             <span>Download PC Software</span>
           </button>
 
-          {/* 2. SYSTEM CONNECTED / NOT CONNECTED BADGE */}
           {isOnline ? (
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-sm">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -270,7 +276,6 @@ export default function VashuExactMerchantDashboard() {
             </span>
           )}
 
-          {/* 3. ACTIVE / INACTIVE BADGE */}
           {isActive ? (
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-sm mr-1">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -283,7 +288,6 @@ export default function VashuExactMerchantDashboard() {
             </span>
           )}
 
-          {/* TAB BUTTONS */}
           <button
             onClick={() => setActiveTab('queue')}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
@@ -537,7 +541,7 @@ export default function VashuExactMerchantDashboard() {
                     POWERED & SECURED BY
                   </div>
                   <div className="text-sm font-bold text-white tracking-wider">scantoprint.in</div>
-                  <div className="text-[10px] font-mono text-indigo-300/80">{portalSubdomain}</div>
+                  <div className="text-[10px] font-mono text-indigo-300/80">{displayPortalLink}</div>
                 </div>
               </div>
             </div>
