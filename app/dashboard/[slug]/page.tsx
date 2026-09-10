@@ -146,8 +146,9 @@ export default function VashuExactMerchantDashboard() {
     window.print();
   };
 
+  // Direct .zip download
   const handleDownloadSoftware = () => {
-    const { data } = supabase.storage.from('software').getPublicUrl('ScanToPrint.exe');
+    const { data } = supabase.storage.from('software').getPublicUrl('ScanToPrint.zip');
     if (data?.publicUrl) {
       window.open(data.publicUrl, '_blank');
     }
@@ -186,7 +187,6 @@ export default function VashuExactMerchantDashboard() {
   const shopTitle = shop.business_name || shop.name || 'Store';
   const shopInitial = shopTitle.trim().charAt(0).toUpperCase() || 'S';
 
-  // Sahi exact link
   const uploadPageUrl = `${baseUrl}/shop/${shop.slug}`;
   const displayPrintLink = `scantoprint.in/shop/${shop.slug}`;
   const qrImageSource = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(uploadPageUrl)}`;
@@ -261,7 +261,7 @@ export default function VashuExactMerchantDashboard() {
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-500/40 shadow-sm transition-all cursor-pointer"
           >
             <span>⬇</span>
-            <span>Download PC Software</span>
+            <span>Download PC Package (.zip)</span>
           </button>
 
           {isOnline ? (
@@ -541,7 +541,6 @@ export default function VashuExactMerchantDashboard() {
                     POWERED & SECURED BY
                   </div>
                   <div className="text-sm font-bold text-white tracking-wider">scantoprint.in</div>
-                  {/* YAHAN AB DIRECT SAHI LINK DIKHEGA */}
                   <div className="text-[10px] font-mono text-indigo-300/80">{displayPrintLink}</div>
                 </div>
               </div>

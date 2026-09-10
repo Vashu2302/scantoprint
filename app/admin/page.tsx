@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -9,428 +9,344 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-export default function AdminOverviewPage() {
+export default function AdminSuperDashboard() {
+  const router = useRouter();
+
+  // Authentication & Data State
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [adminPass, setAdminPass] = useState('');
-  const [errorMsg, setErrorMsg] = useState('');
-  const [verifying, setVerifying] = useState(false);
+  const [inputPassword, setInputPassword] = useState('');
+  const [authError, setAuthError] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // Shop & Platform Metrics
   const [shops, setShops] = useState<any[]>([]);
-  const [totalLifetimePrints, setTotalLifetimePrints] = useState<number>(0);
-  const [loading, setLoading] = useState(false);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  // Upload .exe states
-  const [isUploadingExe, setIsUploadingExe] = useState(false);
+  // Agent Upload State
+  const [isUploadingZip, setIsUploadingZip] = useState(false);
   const [uploadSuccessMsg, setUploadSuccessMsg] = useState('');
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [shopToDelete, setShopToDelete] = useState<any>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-
+  // Check login state on mount
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const savedAuth = sessionStorage.getItem('stp_admin_auth');
-      if (savedAuth === 'true') {
-        setIsAuthenticated(true);
-        fetchDashboardData();
-      }
+    const sessionAuth = sessionStorage.getItem('stp_admin_auth');
+    if (sessionAuth === 'true') {
+      setIsAuthenticated(true);
+      fetchAdminData();
+    } else {
+      setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    const shopsChannel = supabase
-      .channel('admin_realtime_shops')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'shops' },
-        () => {
-          fetchDashboardData();
-        }
-      )
-      .subscribe();
-
-    const ordersChannel = supabase
-      .channel('admin_realtime_orders')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'orders' },
-        () => {
-          fetchDashboardData();
-        }
-      )
-      .subscribe();
-
-    const interval = setInterval(fetchDashboardData, 5000);
-
-    return () => {
-      supabase.removeChannel(shopsChannel);
-      supabase.removeChannel(ordersChannel);
-      clearInterval(interval);
-    };
-  }, [isAuthenticated]);
-
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMsg('');
-    setVerifying(true);
+    setAuthError(false);
 
     try {
       const res = await fetch('/api/admin/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: adminPass }),
+        body: JSON.stringify({ password: inputPassword }),
       });
 
-      const data = await res.json();
-
-      if (data.success) {
-        if (typeof window !== 'undefined') {
-          sessionStorage.setItem('stp_admin_auth', 'true');
-        }
+      if (res.ok) {
+        sessionStorage.setItem('stp_admin_auth', 'true');
         setIsAuthenticated(true);
-        fetchDashboardData();
+        fetchAdminData();
       } else {
-        setErrorMsg(data.error || 'Invalid Master Key');
+        setAuthError(true);
       }
-    } catch (err) {
-      setErrorMsg('Failed to connect to verification server');
-    } finally {
-      setVerifying(false);
+    } catch {
+      setAuthError(true);
     }
   };
 
-  const handleSignOut = () => {
-    if (typeof window !== 'undefined') {
-      sessionStorage.removeItem('stp_admin_auth');
-    }
+  const handleAdminLogout = () => {
+    sessionStorage.removeItem('stp_admin_auth');
     setIsAuthenticated(false);
-    setAdminPass('');
+    setInputPassword('');
   };
 
-  const fetchDashboardData = async () => {
+  // Fetch shops & orders
+  const fetchAdminData = async () => {
     setLoading(true);
     const { data: shopsData } = await supabase
       .from('shops')
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (shopsData) setShops(shopsData);
-
     const { data: ordersData } = await supabase
       .from('orders')
-      .select('pages, copies, print_status')
-      .eq('print_status', 'completed');
+      .select('*')
+      .order('created_at', { ascending: false });
 
-    if (ordersData) {
-      const totalSheets = ordersData.reduce(
-        (sum, ord) => sum + (Number(ord.pages || 1) * Number(ord.copies || 1)),
-        0
-      );
-      setTotalLifetimePrints(totalSheets);
-    }
-
+    if (shopsData) setShops(shopsData);
+    if (ordersData) setOrders(ordersData);
     setLoading(false);
   };
 
-  // Upload .exe to Supabase Storage (Bucket: software)
-  const handleExeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Upload ScanToPrint.zip to Supabase 'software' bucket
+  const handleZipUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setIsUploadingExe(true);
+    setIsUploadingZip(true);
     setUploadSuccessMsg('');
 
     try {
       const { error } = await supabase.storage
         .from('software')
-        .upload('ScanToPrint.exe', file, {
-          upsert: true, // Hamesha nayi file se overwrite/update karega
-          contentType: 'application/vnd.microsoft.portable-executable',
+        .upload('ScanToPrint.zip', file, {
+          upsert: true,
+          contentType: 'application/zip',
         });
 
       if (error) throw error;
 
-      setUploadSuccessMsg('✓ New ScanToPrint.exe uploaded successfully!');
+      setUploadSuccessMsg('✓ New ScanToPrint.zip package uploaded successfully!');
       setTimeout(() => setUploadSuccessMsg(''), 4000);
     } catch (err: any) {
       alert('Upload failed: ' + err.message);
     } finally {
-      setIsUploadingExe(false);
+      setIsUploadingZip(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
-  const confirmDeleteShop = async () => {
-    if (!shopToDelete) return;
-    setIsDeleting(true);
+  const handleDeleteShop = async (id: string, name: string) => {
+    if (!confirm(`Are you sure you want to delete store "${name}"? This action cannot be undone.`)) {
+      return;
+    }
 
-    try {
-      await supabase.from('orders').delete().eq('shop_id', shopToDelete.id);
-      const { error } = await supabase.from('shops').delete().eq('id', shopToDelete.id);
-
-      if (error) throw error;
-
-      setShops((prev) => prev.filter((s) => s.id !== shopToDelete.id));
-      setShopToDelete(null);
-    } catch (err: any) {
-      alert(`Failed to delete shop: ${err.message}`);
-    } finally {
-      setIsDeleting(false);
+    const { error } = await supabase.from('shops').delete().eq('id', id);
+    if (!error) {
+      setShops((prev) => prev.filter((s) => s.id !== id));
+    } else {
+      alert('Failed to delete shop: ' + error.message);
     }
   };
-
-  const isShopActive = (shop: any) => {
-    if (!shop.last_seen || !shop.is_online) return false;
-    const diff = (Date.now() - new Date(shop.last_seen).getTime()) / 1000;
-    return diff < 25 && shop.agent_status === 'active';
-  };
-
-  const activeShopsCount = shops.filter((s) => isShopActive(s)).length;
-  const inactiveShopsCount = shops.length - activeShopsCount;
 
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-[#070b14] text-slate-100 flex items-center justify-center p-4 font-sans">
-        <div className="w-full max-w-sm bg-[#0e1626] border border-slate-800 p-8 rounded-3xl shadow-2xl text-center space-y-4">
-          <div className="w-12 h-12 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl flex items-center justify-center mx-auto text-xl">
-            🔒
-          </div>
-          <h1 className="text-xl font-bold text-white tracking-tight">Admin Control Panel</h1>
-          <p className="text-xs text-slate-400">Enter server master password to access registered counters.</p>
-
-          {errorMsg && (
-            <div className="p-2.5 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-xl">
-              {errorMsg}
+        <form
+          onSubmit={handleAdminLogin}
+          className="bg-[#0b1021] border border-slate-800 p-8 rounded-3xl w-full max-w-sm space-y-5 shadow-2xl"
+        >
+          <div className="text-center space-y-1">
+            <div className="w-12 h-12 mx-auto rounded-2xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center font-bold text-xl border border-indigo-500/30">
+              ⚡
             </div>
-          )}
+            <h1 className="text-xl font-black tracking-tight text-white">Platform SuperAdmin</h1>
+            <p className="text-xs text-slate-400">Master Authentication Required</p>
+          </div>
 
-          <form onSubmit={handleLogin} className="space-y-3">
+          <div className="space-y-2">
             <input
               type="password"
-              required
-              placeholder="Master Password"
-              value={adminPass}
-              onChange={(e) => setAdminPass(e.target.value)}
-              className="w-full bg-[#070b14] border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-center text-white focus:outline-none focus:border-indigo-500 font-mono"
+              placeholder="Enter Master Password"
+              value={inputPassword}
+              onChange={(e) => setInputPassword(e.target.value)}
+              className="w-full bg-[#070b18] border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono transition-all"
+              autoFocus
             />
-            <button
-              type="submit"
-              disabled={verifying}
-              className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-800 text-white font-semibold text-xs tracking-wide transition-all shadow-lg shadow-indigo-600/25 cursor-pointer"
-            >
-              {verifying ? 'Verifying with Server...' : 'Access Dashboard'}
-            </button>
-          </form>
-        </div>
+            {authError && (
+              <p className="text-rose-400 text-[11px] font-semibold">
+                Invalid Master Authorization Key.
+              </p>
+            )}
+          </div>
+
+          <button
+            type="submit"
+            className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-indigo-600/30 cursor-pointer"
+          >
+            Access Control Panel
+          </button>
+        </form>
       </div>
     );
   }
 
+  const totalRevenue = orders
+    .filter((o) => o.payment_status === 'paid' || o.payment_status === 'completed')
+    .reduce((sum, o) => sum + Number(o.amount || 0), 0);
+
+  const totalPrints = orders
+    .filter((o) => o.print_status === 'completed')
+    .reduce((sum, o) => sum + (Number(o.pages || 1) * Number(o.copies || 1)), 0);
+
+  const activeShopsCount = shops.filter((s) => {
+    return (
+      s.is_online &&
+      s.last_seen &&
+      (Date.now() - new Date(s.last_seen).getTime()) / 1000 < 25
+    );
+  }).length;
+
+  const filteredShops = shops.filter(
+    (s) =>
+      s.business_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.slug?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.phone?.includes(searchQuery)
+  );
+
   return (
-    <div className="min-h-screen bg-[#070b14] text-slate-100 p-6 sm:p-10 font-sans relative">
+    <div className="min-h-screen bg-[#060813] text-slate-200 font-sans p-6 sm:p-8 space-y-6">
       <div className="max-w-7xl mx-auto space-y-6">
-        
-        {/* Header with Upload .exe Button */}
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-6">
+        {/* Top Bar */}
+        <header className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800/80 pb-5">
           <div>
-            <span className="text-xs font-semibold text-indigo-400 uppercase tracking-widest">ADMIN CONTROL</span>
-            <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight mt-0.5">
-              ScanToPrint Master Hub
-            </h1>
-            {uploadSuccessMsg && (
-              <span className="text-xs text-emerald-400 font-medium block mt-1">
-                {uploadSuccessMsg}
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-black text-white tracking-tight">ScanToPrint Central</h1>
+              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                Super Admin
               </span>
-            )}
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Live Fleet Control, Merchant Directory & Deployment Hub
+            </p>
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Hidden File Input for .exe */}
             <input
               type="file"
               ref={fileInputRef}
-              accept=".exe"
-              onChange={handleExeUpload}
+              accept=".zip"
+              onChange={handleZipUpload}
               className="hidden"
             />
-
-            {/* UPLOAD .EXE BUTTON */}
             <button
               onClick={() => fileInputRef.current?.click()}
-              disabled={isUploadingExe}
-              className="text-xs font-bold text-white px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-800 border border-indigo-500/30 transition-all shadow-lg shadow-indigo-600/20 cursor-pointer flex items-center gap-2"
+              disabled={isUploadingZip}
+              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-800 text-white text-xs font-bold transition-all shadow-lg shadow-indigo-600/30 flex items-center gap-2 cursor-pointer"
             >
-              <span>📤</span>
-              <span>{isUploadingExe ? 'Uploading Software...' : 'Upload PC Agent (.exe)'}</span>
+              <span>📦</span>
+              <span>{isUploadingZip ? 'Uploading Package...' : 'Upload PC Package (.zip)'}</span>
             </button>
 
-            {/* Sign Out Button */}
             <button
-              onClick={handleSignOut}
-              className="text-xs font-medium text-slate-400 hover:text-rose-400 px-4 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-rose-500/30 transition-all cursor-pointer"
+              onClick={handleAdminLogout}
+              className="px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs font-semibold text-rose-400 hover:bg-rose-500/10 transition-all cursor-pointer"
             >
               Sign Out
             </button>
           </div>
-        </div>
+        </header>
 
-        {/* TOP STATS METRIC GRID */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-[#0e1626] border border-slate-800 rounded-2xl p-5 shadow-xl">
-            <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block">Active Shops</span>
-            <div className="text-2xl font-black text-white mt-1 flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span>{activeShopsCount}</span>
-            </div>
-            <span className="text-[11px] text-slate-400">Desktop Agents Online & Spooling</span>
+        {uploadSuccessMsg && (
+          <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-xs font-semibold">
+            {uploadSuccessMsg}
           </div>
+        )}
 
-          <div className="bg-[#0e1626] border border-slate-800 rounded-2xl p-5 shadow-xl">
-            <span className="text-[10px] font-bold text-rose-400 uppercase tracking-wider block">Inactive Shops</span>
-            <div className="text-2xl font-black text-white mt-1 flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
-              <span>{inactiveShopsCount}</span>
-            </div>
-            <span className="text-[11px] text-slate-400">Disconnected or Agent Paused</span>
+        {/* Global Platform Metrics */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-[#0b1021] border border-slate-800 rounded-2xl p-4">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Registered Shops</span>
+            <div className="text-2xl font-bold font-mono text-white mt-1">{shops.length}</div>
           </div>
-
-          {/* LIFETIME PRINTS TILL NOW */}
-          <div className="bg-indigo-950/40 border border-indigo-500/40 rounded-2xl p-5 shadow-xl relative overflow-hidden">
-            <span className="text-[10px] font-bold text-indigo-300 uppercase tracking-wider block">Lifetime Prints Till Now</span>
-            <div className="text-2xl font-black text-indigo-200 mt-1 font-mono">
-              {totalLifetimePrints.toLocaleString()} <span className="text-sm font-sans font-normal text-indigo-300">Sheets</span>
-            </div>
-            <span className="text-[11px] text-indigo-300/80">Aggregated across all registered partner stores</span>
+          <div className="bg-[#0b1021] border border-slate-800 rounded-2xl p-4">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Spooler Nodes</span>
+            <div className="text-2xl font-bold font-mono text-emerald-400 mt-1">{activeShopsCount} Online</div>
+          </div>
+          <div className="bg-[#0b1021] border border-slate-800 rounded-2xl p-4">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Lifetime Platform Revenue</span>
+            <div className="text-2xl font-bold font-mono text-indigo-400 mt-1">₹{totalRevenue.toFixed(2)}</div>
+          </div>
+          <div className="bg-[#0b1021] border border-slate-800 rounded-2xl p-4">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Sheets Printed</span>
+            <div className="text-2xl font-bold font-mono text-amber-400 mt-1">{totalPrints} Sheets</div>
           </div>
         </div>
 
-        {/* Registered Shops Master Table */}
-        <div className="bg-[#0e1626]/90 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
-          <div className="p-4 bg-slate-900/50 border-b border-slate-800 flex items-center justify-between">
+        {/* Merchant Directory */}
+        <div className="bg-[#0b1021] border border-slate-800 rounded-2xl overflow-hidden shadow-xl space-y-4 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xs font-bold text-white uppercase tracking-wider">Registered Partner Counters</h2>
-            <button
-              onClick={fetchDashboardData}
-              className="text-[11px] text-indigo-400 hover:text-indigo-300 cursor-pointer font-mono"
-            >
-              ↻ Refresh Sync
-            </button>
+            <input
+              type="text"
+              placeholder="Search store by name, slug or phone..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="bg-[#070b18] border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 w-full max-w-xs font-mono"
+            />
           </div>
 
-          {loading && shops.length === 0 ? (
-            <div className="p-12 text-center text-slate-400 text-xs font-mono">Fetching database records...</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-950/70 border-b border-slate-800 text-slate-400 uppercase tracking-wider text-[10px]">
-                    <th className="p-4">Shop Name</th>
-                    <th className="p-4">Agent Status</th>
-                    <th className="p-4">Subdomain / View</th>
-                    <th className="p-4">UPI ID</th>
-                    <th className="p-4">Phone</th>
-                    <th className="p-4">Password</th>
-                    <th className="p-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60 font-mono">
-                  {shops.map((shop) => {
-                    const active = isShopActive(shop);
-                    return (
-                      <tr key={shop.id} className="hover:bg-slate-800/20 transition-colors">
-                        <td className="p-4 font-sans font-semibold text-white">
-                          {shop.business_name || shop.name}
-                        </td>
-                        <td className="p-4 font-sans">
-                          {active ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                              Active
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20 uppercase">
-                              <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-                              Inactive
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-4">
-                          <Link
-                            href={`/admin/shops/${shop.slug}`}
-                            className="text-indigo-400 hover:text-indigo-300 hover:underline inline-flex items-center gap-1"
-                          >
-                            <span>{shop.slug}</span>
-                            <span className="text-[11px]">↗</span>
-                          </Link>
-                        </td>
-                        <td className="p-4 text-emerald-400">
-                          {shop.upi_id || 'Not Set'}
-                        </td>
-                        <td className="p-4 text-slate-300">
-                          {shop.phone}
-                        </td>
-                        <td className="p-4 text-rose-400 font-bold bg-rose-500/5 px-2 py-0.5 rounded inline-block mt-3">
-                          {shop.plain_password}
-                        </td>
-                        <td className="p-4 text-right font-sans">
-                          <button
-                            onClick={() => setShopToDelete(shop)}
-                            className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1"
-                          >
-                            <span>Delete</span>
-                            <span>🗑️</span>
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-[#070b18] text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-800">
+                  <th className="p-3.5">Store Details</th>
+                  <th className="p-3.5">Subdomain / Link</th>
+                  <th className="p-3.5">Spooler Telemetry</th>
+                  <th className="p-3.5">Credentials</th>
+                  <th className="p-3.5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/80">
+                {filteredShops.map((s) => {
+                  const isStoreOnline = Boolean(
+                    s.is_online &&
+                    s.last_seen &&
+                    (Date.now() - new Date(s.last_seen).getTime()) / 1000 < 25
+                  );
+                  return (
+                    <tr key={s.id} className="hover:bg-slate-800/20 transition-colors">
+                      <td className="p-3.5">
+                        <div className="font-bold text-white text-sm">{s.business_name || s.name}</div>
+                        <div className="text-slate-400 text-[11px] mt-0.5">Owner: {s.owner_name || 'N/A'}</div>
+                      </td>
+                      <td className="p-3.5 font-mono text-indigo-400 text-[11px]">
+                        <a
+                          href={`/shop/${s.slug}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="hover:underline"
+                        >
+                          scantoprint.in/shop/{s.slug} ↗
+                        </a>
+                      </td>
+                      <td className="p-3.5">
+                        {isStoreOnline ? (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                            CONNECTED
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                            OFFLINE
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-3.5 font-mono text-[11px]">
+                        <div className="text-slate-300">ID: {s.phone}</div>
+                        <div className="text-rose-400 font-bold">Pass: {s.plain_password}</div>
+                      </td>
+                      <td className="p-3.5 text-right space-x-2">
+                        <button
+                          onClick={() => router.push(`/admin/shops/${s.slug}`)}
+                          className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-semibold cursor-pointer"
+                        >
+                          Inspect 360°
+                        </button>
+                        <button
+                          onClick={() => handleDeleteShop(s.id, s.business_name || s.name)}
+                          className="px-2.5 py-1 bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/30 rounded-lg text-xs font-semibold cursor-pointer"
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
-
-      {/* Delete Confirmation Modal */}
-      {shopToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-[#0e1626] border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
-            <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center text-xl mx-auto">
-              ⚠️
-            </div>
-
-            <div className="text-center space-y-2">
-              <h2 className="text-lg font-bold text-white">Delete Print Shop?</h2>
-              <p className="text-xs text-slate-400">
-                Are you sure you want to permanently delete{' '}
-                <span className="text-white font-bold font-mono">
-                  {shopToDelete.business_name || shopToDelete.name}
-                </span>{' '}
-                (<span className="font-mono text-indigo-400">{shopToDelete.slug}</span>)?
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3 pt-2">
-              <button
-                type="button"
-                disabled={isDeleting}
-                onClick={() => setShopToDelete(null)}
-                className="w-1/2 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={isDeleting}
-                onClick={confirmDeleteShop}
-                className="w-1/2 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-all shadow-lg shadow-rose-600/30 cursor-pointer disabled:opacity-50"
-              >
-                {isDeleting ? 'Deleting...' : 'Yes, Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
