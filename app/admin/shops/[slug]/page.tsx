@@ -18,6 +18,13 @@ export default function ShopInspector360AdminPage() {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [copiedKey, setCopiedKey] = useState(false);
+  const [baseUrl, setBaseUrl] = useState('https://scantoprint.in');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setBaseUrl(window.location.origin);
+    }
+  }, []);
 
   useEffect(() => {
     async function loadData() {
@@ -145,15 +152,13 @@ export default function ShopInspector360AdminPage() {
 
   const shopTitle = shop.business_name || shop.name || 'Store';
   const customerUploadLink = `/shop/${shop.slug}`;
-  const counterQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=350x350&data=${encodeURIComponent(
-    typeof window !== 'undefined'
-      ? `${window.location.origin}/shop/${shop.slug}`
-      : `https://scantoprint.in/shop/${shop.slug}`
-  )}`;
+  const displayPrintLink = `scantoprint.in/shop/${shop.slug}`;
+  const uploadPageAbsoluteUrl = `${baseUrl}/shop/${shop.slug}`;
+  
+  const counterQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=350x350&data=${encodeURIComponent(uploadPageAbsoluteUrl)}`;
 
   return (
     <div className="min-h-screen bg-[#060813] text-slate-200 font-sans p-4 sm:p-8 space-y-6">
-      {/* PRINT CSS: यह एडमिन पेज की बाकी सब चीजें छुपा देगा और सिर्फ पोस्टर को कलरफुल प्रिंट करेगा */}
       <style jsx global>{`
         @media print {
           @page {
@@ -168,13 +173,11 @@ export default function ShopInspector360AdminPage() {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
-          /* एडमिन पेज के बाकी सारे सेक्शन हाइड करें */
           .admin-no-print,
           header,
           button {
             display: none !important;
           }
-          /* सिर्फ स्टैंडी कार्ड को सिंगल पेज पर सेंटर करें */
           #admin-standee-print-container {
             display: flex !important;
             justify-content: center !important;
@@ -197,7 +200,7 @@ export default function ShopInspector360AdminPage() {
 
       <div className="max-w-7xl mx-auto space-y-6">
         
-        {/* TOP NAVBAR (PRINT MEIN HIDE) */}
+        {/* TOP NAVBAR */}
         <div className="admin-no-print flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-5">
           <div className="flex items-center gap-3">
             <button
@@ -221,13 +224,12 @@ export default function ShopInspector360AdminPage() {
                 rel="noreferrer"
                 className="text-xs text-indigo-400 hover:underline font-mono inline-flex items-center gap-1"
               >
-                <span>{shop.slug}.scantoprint.in</span>
+                <span>{displayPrintLink}</span>
                 <span>↗</span>
               </a>
             </div>
           </div>
 
-          {/* RIGHT ACTION BUTTONS */}
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             {isOnline ? (
               <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-md">
@@ -266,7 +268,7 @@ export default function ShopInspector360AdminPage() {
         {/* 360 DETAILS & COUNTER QR GRID */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           
-          {/* LEFT: Shop Information & Price Tags (PRINT MEIN HIDE) */}
+          {/* LEFT: Shop Information & Price Tags */}
           <div className="admin-no-print lg:col-span-7 bg-[#0b1021] border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
             <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider border-b border-slate-800 pb-3">
               Store Credentials & Spooler Telemetry
@@ -343,11 +345,10 @@ export default function ShopInspector360AdminPage() {
             </div>
           </div>
 
-          {/* RIGHT: BLUE POSTER STANDEE QR CARD (PRINT KE TIME ONLY YEH DIKHEGA) */}
+          {/* RIGHT: BLUE POSTER STANDEE QR CARD */}
           <div className="lg:col-span-5 flex flex-col items-center w-full">
             
             <div id="admin-standee-print-container" className="w-full flex justify-center">
-              {/* Standee Frame */}
               <div 
                 id="admin-printable-standee"
                 style={{
@@ -356,12 +357,10 @@ export default function ShopInspector360AdminPage() {
                 }}
                 className="w-full max-w-sm rounded-[32px] p-6 shadow-2xl text-center space-y-4 text-white relative overflow-hidden bg-gradient-to-b from-[#2563eb] via-[#1d4ed8] to-[#1e40af] border border-blue-400/30"
               >
-                {/* STP Capsule */}
                 <div className="inline-flex items-center justify-center px-3 py-0.5 rounded-full bg-white/20 backdrop-blur-md text-[10px] font-black tracking-widest text-white border border-white/20 uppercase">
                   STP
                 </div>
 
-                {/* Header Title */}
                 <div className="space-y-0.5">
                   <span className="text-[10px] font-bold tracking-widest text-blue-100 uppercase opacity-90 block">
                     ScanToPrint Partner Store
@@ -374,7 +373,6 @@ export default function ShopInspector360AdminPage() {
                   </p>
                 </div>
 
-                {/* White Inner Card with QR */}
                 <div className="bg-white rounded-3xl p-5 shadow-2xl text-slate-900 space-y-2">
                   <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider block flex items-center justify-center gap-1.5">
                     <span>📱</span>
@@ -402,14 +400,14 @@ export default function ShopInspector360AdminPage() {
                   <span className="text-sm font-black tracking-tight text-white block">
                     scantoprint.in
                   </span>
+                  {/* YAHAN AB EXACT WORKING LINK AAYEGA */}
                   <span className="text-[10px] font-mono text-blue-200 block">
-                    {shop.slug}.scantoprint.in
+                    {displayPrintLink}
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Print Button (PRINT MEIN HIDE) */}
             <div className="admin-no-print w-full max-w-sm mt-3">
               <button
                 type="button"
@@ -425,7 +423,7 @@ export default function ShopInspector360AdminPage() {
 
         </div>
 
-        {/* METRICS ROW (PRINT MEIN HIDE) */}
+        {/* METRICS ROW */}
         <div className="admin-no-print grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-[#0b1021] border border-slate-800 rounded-2xl p-5 shadow-xl">
             <span className="text-[10px] uppercase font-bold text-slate-400">Total Store Revenue</span>
@@ -446,7 +444,7 @@ export default function ShopInspector360AdminPage() {
           </div>
         </div>
 
-        {/* ORDERS & SPOOL STREAM (PRINT MEIN HIDE) */}
+        {/* ORDERS & SPOOL STREAM */}
         <div className="admin-no-print bg-[#0b1021] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
           <div className="flex items-center justify-between border-b border-slate-800 pb-3">
             <h2 className="text-xs font-bold text-white uppercase tracking-wider">

@@ -186,9 +186,9 @@ export default function VashuExactMerchantDashboard() {
   const shopTitle = shop.business_name || shop.name || 'Store';
   const shopInitial = shopTitle.trim().charAt(0).toUpperCase() || 'S';
 
-  // FIX: Sahi upload URL jahan customer document upload karega
+  // Sahi exact link
   const uploadPageUrl = `${baseUrl}/shop/${shop.slug}`;
-  const displayPortalLink = `${shop.slug}.scantoprint.in`;
+  const displayPrintLink = `scantoprint.in/shop/${shop.slug}`;
   const qrImageSource = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(uploadPageUrl)}`;
 
   const todayRevenue = orders
@@ -250,7 +250,7 @@ export default function VashuExactMerchantDashboard() {
           <div>
             <h1 className="font-bold text-base text-white leading-tight">{shopTitle}</h1>
             <p className="text-[11px] text-slate-400">
-              Counter Link: <a href={uploadPageUrl} target="_blank" rel="noreferrer" className="text-slate-400 hover:text-indigo-300 font-mono underline">{displayPortalLink}</a>
+              Counter Link: <a href={uploadPageUrl} target="_blank" rel="noreferrer" className="text-indigo-400 hover:text-indigo-300 font-mono underline">{displayPrintLink}</a>
             </p>
           </div>
         </div>
@@ -541,7 +541,8 @@ export default function VashuExactMerchantDashboard() {
                     POWERED & SECURED BY
                   </div>
                   <div className="text-sm font-bold text-white tracking-wider">scantoprint.in</div>
-                  <div className="text-[10px] font-mono text-indigo-300/80">{displayPortalLink}</div>
+                  {/* YAHAN AB DIRECT SAHI LINK DIKHEGA */}
+                  <div className="text-[10px] font-mono text-indigo-300/80">{displayPrintLink}</div>
                 </div>
               </div>
             </div>
