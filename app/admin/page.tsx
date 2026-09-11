@@ -278,8 +278,8 @@ export default function AdminSuperDashboard() {
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-[#070b18] text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-800">
-                  <th className="p-3.5">Store Details</th>
-                  <th className="p-3.5">Subdomain / Link</th>
+                  <th className="p-3.5">Store Details (Click for 360°)</th>
+                  <th className="p-3.5">360° Inspector Link</th>
                   <th className="p-3.5">Spooler Telemetry</th>
                   <th className="p-3.5">Credentials</th>
                   <th className="p-3.5 text-right">Actions</th>
@@ -294,20 +294,36 @@ export default function AdminSuperDashboard() {
                   );
                   return (
                     <tr key={s.id} className="hover:bg-slate-800/20 transition-colors">
+                      {/* Clicking Name opens 360° Inspector */}
                       <td className="p-3.5">
-                        <div className="font-bold text-white text-sm">{s.business_name || s.name}</div>
+                        <button
+                          onClick={() => router.push(`/admin/shops/${s.slug}`)}
+                          className="font-bold text-white text-sm hover:text-indigo-400 transition-colors text-left cursor-pointer flex items-center gap-1.5"
+                        >
+                          <span>{s.business_name || s.name}</span>
+                          <span className="text-[10px] text-indigo-400 font-mono">⚡ 360°</span>
+                        </button>
                         <div className="text-slate-400 text-[11px] mt-0.5">Owner: {s.owner_name || 'N/A'}</div>
                       </td>
-                      <td className="p-3.5 font-mono text-indigo-400 text-[11px]">
+
+                      {/* Main link points directly to 360° Inspector */}
+                      <td className="p-3.5 font-mono text-[11px]">
+                        <button
+                          onClick={() => router.push(`/admin/shops/${s.slug}`)}
+                          className="text-indigo-400 hover:text-indigo-300 hover:underline font-bold text-left cursor-pointer block"
+                        >
+                          View 360° Inspector ➔
+                        </button>
                         <a
                           href={`/shop/${s.slug}`}
                           target="_blank"
                           rel="noreferrer"
-                          className="hover:underline"
+                          className="text-[10px] text-slate-500 hover:text-slate-300 hover:underline inline-block mt-0.5"
                         >
-                          scantoprint.in/shop/{s.slug} ↗
+                          (Customer Upload Page ↗)
                         </a>
                       </td>
+
                       <td className="p-3.5">
                         {isStoreOnline ? (
                           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
@@ -328,13 +344,13 @@ export default function AdminSuperDashboard() {
                       <td className="p-3.5 text-right space-x-2">
                         <button
                           onClick={() => router.push(`/admin/shops/${s.slug}`)}
-                          className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-semibold cursor-pointer"
+                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold cursor-pointer transition-all shadow-md shadow-indigo-600/30"
                         >
-                          Inspect 360°
+                          Inspect 360° ⚡
                         </button>
                         <button
                           onClick={() => handleDeleteShop(s.id, s.business_name || s.name)}
-                          className="px-2.5 py-1 bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/30 rounded-lg text-xs font-semibold cursor-pointer"
+                          className="px-2.5 py-1.5 bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/30 rounded-lg text-xs font-semibold cursor-pointer transition-all"
                         >
                           Delete
                         </button>
