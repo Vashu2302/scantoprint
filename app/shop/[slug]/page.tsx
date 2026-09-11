@@ -203,7 +203,6 @@ export default function ExactCustomerPrintStudio() {
         const targetX = colIdx * cellWidth;
         const targetY = rowIdx * cellHeight;
 
-        // Render file onto off-screen canvas with exact rotation and grayscale
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         if (!ctx) continue;
@@ -224,7 +223,7 @@ export default function ExactCustomerPrintStudio() {
         ctx.rotate((rotation * Math.PI) / 180);
         ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
 
-        // Apply real grayscale pixel-conversion if B&W selected
+        // Real grayscale pixel-conversion if B&W
         if (colorMode === 'bw') {
           const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
           const d = imgData.data;
@@ -239,16 +238,23 @@ export default function ExactCustomerPrintStudio() {
 
         const renderedDataUrl = canvas.toDataURL('image/jpeg', 0.95);
 
-        // Aspect ratio fitting inside cell slot
-        const margin = isFullFit ? 1.5 : 4;
+        // Aspect ratio fitting inside cell slot without excessive margins
+        const margin = isFullFit ? 0 : 2;
         const maxW = cellWidth - margin * 2;
         const maxH = cellHeight - margin * 2;
 
-        const ratio = Math.min(maxW / canvas.width, maxH / canvas.height);
-        const finalW = canvas.width * ratio;
-        const finalH = canvas.height * ratio;
-        const finalX = targetX + (cellWidth - finalW) / 2;
-        const finalY = targetY + (cellHeight - finalH) / 2;
+        let finalW = maxW;
+        let finalH = maxH;
+        let finalX = targetX + margin;
+        let finalY = targetY + margin;
+
+        if (!isFullFit) {
+          const ratio = Math.min(maxW / canvas.width, maxH / canvas.height);
+          finalW = canvas.width * ratio;
+          finalH = canvas.height * ratio;
+          finalX = targetX + (cellWidth - finalW) / 2;
+          finalY = targetY + (cellHeight - finalH) / 2;
+        }
 
         pdf.addImage(renderedDataUrl, 'JPEG', finalX, finalY, finalW, finalH);
       }
@@ -484,7 +490,7 @@ export default function ExactCustomerPrintStudio() {
           /* ==================== PAGE 1: UPLOAD & LIVE PREVIEW FIRST ==================== */
           <div className="space-y-6">
             
-            {/* 1. UPLOAD CONTAINER (With .webp added) */}
+            {/* 1. UPLOAD CONTAINER */}
             <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-5 shadow-2xl space-y-4">
               <h2 className="text-center text-xs font-bold text-slate-300 uppercase tracking-wider">
                 Upload Document
@@ -543,7 +549,7 @@ export default function ExactCustomerPrintStudio() {
               )}
             </div>
 
-            {/* 2. LIVE PRINT PREVIEW: POSITIONED DIRECTLY BELOW UPLOAD */}
+            {/* 2. LIVE PRINT PREVIEW */}
             <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-5 shadow-2xl space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
@@ -562,9 +568,8 @@ export default function ExactCustomerPrintStudio() {
                   </div>
                 ) : (
                   <div className="w-full flex flex-col items-center space-y-4">
-                    {/* Sheet Canvas with Accurate Spacing */}
                     <div
-                      className={`bg-white rounded-lg shadow-2xl transition-all duration-200 border border-slate-200 overflow-hidden flex items-center justify-center p-2 ${
+                      className={`bg-white rounded-lg shadow-2xl transition-all duration-200 border border-slate-200 overflow-hidden flex items-center justify-center p-1.5 ${
                         orientation === 'Landscape'
                           ? paperSize === 'Legal'
                             ? 'w-[360px] sm:w-[430px] h-[220px] sm:h-[265px]'
@@ -585,20 +590,21 @@ export default function ExactCustomerPrintStudio() {
                           return (
                             <div
                               key={slotIdx}
-                              className="w-full h-full border border-dashed border-slate-300 rounded flex items-center justify-center overflow-hidden bg-slate-50 relative p-1"
+                              className="w-full h-full border border-dashed border-slate-300 rounded flex items-center justify-center overflow-hidden bg-slate-50 relative p-0.5"
                             >
                               {fileItem ? (
-                                <div className="w-full h-full flex items-center justify-center relative overflow-hidden">
+                                <div className="w-full h-full flex items-center justify-center relative overflow-hidden bg-white">
                                   <img
                                     src={fileItem.url}
                                     alt="slot"
-                                    className="transition-all duration-200 object-contain"
+                                    className="transition-all duration-200"
                                     style={{
                                       transform: `rotate(${rotation}deg)`,
-                                      maxWidth: isRotatedQuarter ? '75%' : '98%',
-                                      maxHeight: isRotatedQuarter ? '75%' : '98%',
-                                      width: isFullFit ? '100%' : 'auto',
-                                      height: isFullFit ? '100%' : 'auto',
+                                      width: isRotatedQuarter ? (isFullFit ? '100%' : 'auto') : '100%',
+                                      height: isRotatedQuarter ? (isFullFit ? '100%' : 'auto') : '100%',
+                                      maxWidth: isRotatedQuarter ? 'none' : '100%',
+                                      maxHeight: isRotatedQuarter ? 'none' : '100%',
+                                      objectFit: isFullFit ? 'fill' : 'contain',
                                     }}
                                   />
                                 </div>
