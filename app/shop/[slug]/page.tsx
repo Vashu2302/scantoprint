@@ -169,12 +169,38 @@ export default function ExactCustomerPrintStudio() {
 
     setPaying(true);
     try {
+      // 1. Upload File directly to 'print-files' storage bucket
+      const targetFile = files[0].file;
+      const fileExt = targetFile.name.split('.').pop() || 'pdf';
+      const cleanFileName = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+      const filePath = `${shop.id}/${cleanFileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('print-files')
+        .upload(filePath, targetFile, {
+          cacheControl: '3600',
+          upsert: true,
+        });
+
+      if (uploadError) {
+        throw new Error('File storage upload failed: ' + uploadError.message);
+      }
+
+      // Generate public URL for the agent to download
+      const { data: publicData } = supabase.storage
+        .from('print-files')
+        .getPublicUrl(filePath);
+
+      const uploadedUrl = publicData?.publicUrl || '';
+
+      // 2. Insert Order into Supabase
       const { data: newOrder, error } = await supabase
         .from('orders')
         .insert([
           {
             shop_id: shop.id,
             file_name: files.map((f) => f.name).join(', '),
+            file_url: uploadedUrl,
             pages: totalPages,
             copies: copies,
             amount: totalCost,
@@ -187,9 +213,32 @@ export default function ExactCustomerPrintStudio() {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        // Fallback if 'file_url' column doesn't exist in orders table
+        const { data: fallbackOrder, error: fallbackError } = await supabase
+          .from('orders')
+          .insert([
+            {
+              shop_id: shop.id,
+              file_name: cleanFileName,
+              pages: totalPages,
+              copies: copies,
+              amount: totalCost,
+              payment_status: 'paid',
+              print_status: 'in_queue',
+              print_type: colorMode,
+              sided_type: sideMode,
+            },
+          ])
+          .select()
+          .single();
 
-      setPlacedOrder(newOrder);
+        if (fallbackError) throw fallbackError;
+        setPlacedOrder(fallbackOrder);
+      } else {
+        setPlacedOrder(newOrder);
+      }
+
       setPrintStatus('in_queue');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err: any) {
@@ -317,7 +366,7 @@ export default function ExactCustomerPrintStudio() {
                 </div>
               )}
 
-              {/* Exact Privacy Deletion Banner - pops up instantly on Mark Done */}
+              {/* Exact Privacy Deletion Banner */}
               {isCompleted && (
                 <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-center space-y-1.5 animate-in fade-in zoom-in-95 duration-200">
                   <p className="text-xs font-bold text-emerald-400 flex items-center justify-center gap-1.5">
@@ -601,7 +650,7 @@ export default function ExactCustomerPrintStudio() {
                 onClick={handleConfirmAndPay}
                 className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-bold text-xs tracking-wider rounded-xl transition-all shadow-lg shadow-emerald-600/20 cursor-pointer disabled:cursor-not-allowed"
               >
-                {paying ? 'Routing to Printer...' : 'Confirm and Pay'}
+                {paying ? 'Uploading & Routing...' : 'Confirm and Pay'}
               </button>
             </div>
 
@@ -624,7 +673,6 @@ export default function ExactCustomerPrintStudio() {
                   </div>
                 ) : (
                   <div className="w-full flex flex-col items-center space-y-4">
-                    {/* Simulated Paper Sheet with Clean Zero-Distortion Fitting */}
                     <div
                       className={`bg-white rounded-lg shadow-2xl transition-all duration-200 border border-slate-200 overflow-hidden flex items-center justify-center ${
                         isFullFit ? 'p-0.5 sm:p-1' : 'p-3'
@@ -642,7 +690,6 @@ export default function ExactCustomerPrintStudio() {
                       }}
                     >
                       {pagesPerSheet === 1 ? (
-                        /* 1-Up Layout: Perfect Proportional Fit without Stretching */
                         <div className="w-full h-full flex items-center justify-center overflow-hidden">
                           {currentSheetFiles[0] ? (
                             <img
@@ -664,7 +711,6 @@ export default function ExactCustomerPrintStudio() {
                           )}
                         </div>
                       ) : (
-                        /* 2-in-1 Layout */
                         <div className="w-full h-full flex flex-col gap-1.5 justify-between p-1">
                           <div className="h-[49%] w-full border border-dashed border-slate-300 rounded flex items-center justify-center overflow-hidden bg-slate-50">
                             {currentSheetFiles[0] ? (
@@ -695,7 +741,6 @@ export default function ExactCustomerPrintStudio() {
                       )}
                     </div>
 
-                    {/* Pagination Controls */}
                     {totalPreviewSheets > 1 && (
                       <div className="flex items-center gap-3 text-xs font-mono text-slate-400 pt-2">
                         <button
