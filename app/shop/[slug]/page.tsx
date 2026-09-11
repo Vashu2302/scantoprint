@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
+import jsPDF from 'jspdf';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -36,7 +37,7 @@ export default function ExactCustomerPrintStudio() {
   const [paperSize, setPaperSize] = useState<'A4 Standard' | 'Legal'>('A4 Standard');
   const [orientation, setOrientation] = useState<'Portrait' | 'Landscape'>('Portrait');
   const [rotation, setRotation] = useState<number>(0);
-  const [isFullFit, setIsFullFit] = useState<boolean>(true); // Default true for zero-margin fit
+  const [isFullFit, setIsFullFit] = useState<boolean>(true);
   const [copies, setCopies] = useState<number>(1);
 
   // Preview Pagination
@@ -45,7 +46,7 @@ export default function ExactCustomerPrintStudio() {
   // Payment & Success Screen States
   const [paying, setPaying] = useState<boolean>(false);
   const [placedOrder, setPlacedOrder] = useState<any>(null);
-  const [printStatus, setPrintStatus] = useState<string>('queued'); // queued, in_queue, printing, completed, printed
+  const [printStatus, setPrintStatus] = useState<string>('queued');
 
   useEffect(() => {
     async function loadShop() {
@@ -68,7 +69,6 @@ export default function ExactCustomerPrintStudio() {
   useEffect(() => {
     if (!placedOrder?.id) return;
 
-    // 1. Supabase Realtime Listener
     const channel = supabase
       .channel(`realtime_order_${placedOrder.id}`)
       .on(
@@ -87,7 +87,6 @@ export default function ExactCustomerPrintStudio() {
       )
       .subscribe();
 
-    // 2. Ultra-fast 1s Polling Backup (guarantees instant detection even if websockets drop)
     const pollInterval = setInterval(async () => {
       const { data } = await supabase
         .from('orders')
@@ -161,6 +160,103 @@ export default function ExactCustomerPrintStudio() {
     currentSheet * previewItemsPerSheet
   );
 
+  // =========================================================================
+  // CLIENT-SIDE WYSIWYG RENDERING: Directly renders preview to real A4 PDF
+  // =========================================================================
+  const generatePreviewMatchedPdf = async (): Promise<Blob> => {
+    const isLandscape = orientation === 'Landscape';
+    const pdf = new jsPDF({
+      orientation: isLandscape ? 'landscape' : 'portrait',
+      unit: 'mm',
+      format: paperSize === 'Legal' ? 'legal' : 'a4',
+    });
+
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+
+    let cols = 1;
+    let rows = 1;
+    if (pagesPerSheet === 2) {
+      cols = isLandscape ? 2 : 1;
+      rows = isLandscape ? 1 : 2;
+    } else if (pagesPerSheet === 4) {
+      cols = 2;
+      rows = 2;
+    } else if (pagesPerSheet === 8) {
+      cols = isLandscape ? 4 : 2;
+      rows = isLandscape ? 2 : 4;
+    }
+
+    const cellWidth = pageWidth / cols;
+    const cellHeight = pageHeight / rows;
+
+    for (let s = 0; s < totalPreviewSheets; s++) {
+      if (s > 0) pdf.addPage();
+
+      const batchFiles = files.slice(s * previewItemsPerSheet, (s + 1) * previewItemsPerSheet);
+
+      for (let i = 0; i < batchFiles.length; i++) {
+        const item = batchFiles[i];
+        const colIdx = i % cols;
+        const rowIdx = Math.floor(i / cols);
+
+        const targetX = colIdx * cellWidth;
+        const targetY = rowIdx * cellHeight;
+
+        // Render file onto off-screen canvas with exact rotation and grayscale
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) continue;
+
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.src = item.url;
+        await new Promise((res) => {
+          img.onload = () => res(true);
+          img.onerror = () => res(true);
+        });
+
+        const isRotatedQuarter = rotation === 90 || rotation === 270;
+        canvas.width = isRotatedQuarter ? img.naturalHeight : img.naturalWidth;
+        canvas.height = isRotatedQuarter ? img.naturalWidth : img.naturalHeight;
+
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.rotate((rotation * Math.PI) / 180);
+        ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
+
+        // Apply real grayscale pixel-conversion if B&W selected
+        if (colorMode === 'bw') {
+          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const d = imgData.data;
+          for (let p = 0; p < d.length; p += 4) {
+            const gray = 0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2];
+            d[p] = gray;
+            d[p + 1] = gray;
+            d[p + 2] = gray;
+          }
+          ctx.putImageData(imgData, 0, 0);
+        }
+
+        const renderedDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+
+        // Aspect ratio fitting inside cell slot
+        const margin = isFullFit ? 1.5 : 4;
+        const maxW = cellWidth - margin * 2;
+        const maxH = cellHeight - margin * 2;
+
+        const ratio = Math.min(maxW / canvas.width, maxH / canvas.height);
+        const finalW = canvas.width * ratio;
+        const finalH = canvas.height * ratio;
+        const finalX = targetX + (cellWidth - finalW) / 2;
+        const finalY = targetY + (cellHeight - finalH) / 2;
+
+        pdf.addImage(renderedDataUrl, 'JPEG', finalX, finalY, finalW, finalH);
+      }
+    }
+
+    return pdf.output('blob');
+  };
+
   const handleConfirmAndPay = async () => {
     if (files.length === 0) {
       alert('Please upload at least one document or image.');
@@ -169,76 +265,65 @@ export default function ExactCustomerPrintStudio() {
 
     setPaying(true);
     try {
-      // 1. Upload File directly to 'print-files' storage bucket
-      const targetFile = files[0].file;
-      const fileExt = targetFile.name.split('.').pop() || 'pdf';
-      const cleanFileName = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+      // 1. Client-Side Rendering of the final document
+      const pdfBlob = await generatePreviewMatchedPdf();
+      const cleanFileName = `print_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.pdf`;
       const filePath = `${shop.id}/${cleanFileName}`;
 
+      // 2. Upload compiled PDF to Supabase Storage 'print-files'
       const { error: uploadError } = await supabase.storage
         .from('print-files')
-        .upload(filePath, targetFile, {
+        .upload(filePath, pdfBlob, {
+          contentType: 'application/pdf',
           cacheControl: '3600',
           upsert: true,
         });
 
       if (uploadError) {
-        throw new Error('File storage upload failed: ' + uploadError.message);
+        throw new Error('File storage failed: ' + uploadError.message);
       }
 
-      // Generate public URL for the agent to download
+      // 3. Obtain Public Storage URL
       const { data: publicData } = supabase.storage
         .from('print-files')
         .getPublicUrl(filePath);
 
       const uploadedUrl = publicData?.publicUrl || '';
 
-      // 2. Insert Order into Supabase
-      const { data: newOrder, error } = await supabase
+      // 4. Save Order Payload
+      const orderPayload = {
+        shop_id: shop.id,
+        file_name: cleanFileName,
+        pages: sheetsToPrint,
+        copies: copies,
+        amount: totalCost,
+        payment_status: 'paid',
+        print_status: 'in_queue',
+        print_type: colorMode,
+        sided_type: sideMode,
+      };
+
+      let insertedOrder = null;
+      const { data: orderWithUrl, error: errWithUrl } = await supabase
         .from('orders')
-        .insert([
-          {
-            shop_id: shop.id,
-            file_name: files.map((f) => f.name).join(', '),
-            file_url: uploadedUrl,
-            pages: totalPages,
-            copies: copies,
-            amount: totalCost,
-            payment_status: 'paid',
-            print_status: 'in_queue',
-            print_type: colorMode,
-            sided_type: sideMode,
-          },
-        ])
+        .insert([{ ...orderPayload, file_url: uploadedUrl }])
         .select()
         .single();
 
-      if (error) {
-        // Fallback if 'file_url' column doesn't exist in orders table
-        const { data: fallbackOrder, error: fallbackError } = await supabase
+      if (!errWithUrl && orderWithUrl) {
+        insertedOrder = orderWithUrl;
+      } else {
+        const { data: fallbackOrder, error: fallbackErr } = await supabase
           .from('orders')
-          .insert([
-            {
-              shop_id: shop.id,
-              file_name: cleanFileName,
-              pages: totalPages,
-              copies: copies,
-              amount: totalCost,
-              payment_status: 'paid',
-              print_status: 'in_queue',
-              print_type: colorMode,
-              sided_type: sideMode,
-            },
-          ])
+          .insert([orderPayload])
           .select()
           .single();
 
-        if (fallbackError) throw fallbackError;
-        setPlacedOrder(fallbackOrder);
-      } else {
-        setPlacedOrder(newOrder);
+        if (fallbackErr) throw fallbackErr;
+        insertedOrder = fallbackOrder;
       }
 
+      setPlacedOrder(insertedOrder);
       setPrintStatus('in_queue');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err: any) {
@@ -273,6 +358,13 @@ export default function ExactCustomerPrintStudio() {
   const isCompleted = printStatus === 'completed' || printStatus === 'printed';
   const isPrinting = printStatus === 'printing' || printStatus === 'processing';
 
+  const getGridStyle = () => {
+    if (pagesPerSheet === 2) return 'grid-cols-1 grid-rows-2';
+    if (pagesPerSheet === 4) return 'grid-cols-2 grid-rows-2';
+    if (pagesPerSheet === 8) return orientation === 'Landscape' ? 'grid-cols-4 grid-rows-2' : 'grid-cols-2 grid-rows-4';
+    return 'grid-cols-1 grid-rows-1';
+  };
+
   return (
     <div className="min-h-screen bg-[#060813] text-slate-200 font-sans selection:bg-indigo-600 selection:text-white pb-16">
       {/* Top Navbar */}
@@ -297,9 +389,8 @@ export default function ExactCustomerPrintStudio() {
 
       {/* Main Container */}
       <main className="max-w-3xl mx-auto px-4 pt-6">
-        
-        {/* ==================== PAGE 2: PAYMENT SUCCESSFUL & LIVE QUEUE ==================== */}
         {placedOrder ? (
+          /* ==================== PAGE 2: PAYMENT SUCCESSFUL & LIVE QUEUE ==================== */
           <div className="bg-[#0b1021] border border-slate-800/90 rounded-3xl p-6 sm:p-10 shadow-2xl space-y-6 text-center animate-in fade-in zoom-in-95 duration-200">
             <div className="w-16 h-16 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-3xl flex items-center justify-center mx-auto text-3xl shadow-lg shadow-emerald-500/10">
               ✓
@@ -317,7 +408,7 @@ export default function ExactCustomerPrintStudio() {
               </p>
             </div>
 
-            {/* Order Details Receipt Box */}
+            {/* Receipt Box */}
             <div className="bg-[#070b18] border border-slate-800/90 rounded-2xl p-5 text-left text-xs font-mono space-y-2.5 max-w-md mx-auto">
               <div className="flex justify-between items-center pb-2 border-b border-slate-800">
                 <span className="text-slate-500 font-sans">Order ID:</span>
@@ -335,7 +426,7 @@ export default function ExactCustomerPrintStudio() {
               </div>
             </div>
 
-            {/* Live Queue Status Tracker */}
+            {/* Live Queue Tracker */}
             <div className="bg-[#070b18] border border-slate-800/90 rounded-2xl p-5 max-w-md mx-auto space-y-3">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-slate-400 font-medium">Printer Status:</span>
@@ -366,7 +457,6 @@ export default function ExactCustomerPrintStudio() {
                 </div>
               )}
 
-              {/* Exact Privacy Deletion Banner */}
               {isCompleted && (
                 <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-center space-y-1.5 animate-in fade-in zoom-in-95 duration-200">
                   <p className="text-xs font-bold text-emerald-400 flex items-center justify-center gap-1.5">
@@ -391,15 +481,15 @@ export default function ExactCustomerPrintStudio() {
             </button>
           </div>
         ) : (
-          /* ==================== PAGE 1: UPLOAD & PRINT SETTINGS ==================== */
+          /* ==================== PAGE 1: UPLOAD & LIVE PREVIEW FIRST ==================== */
           <div className="space-y-6">
-            {/* CARD 1: PRINT SETTINGS */}
+            
+            {/* 1. UPLOAD CONTAINER (With .webp added) */}
             <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-5 shadow-2xl space-y-4">
               <h2 className="text-center text-xs font-bold text-slate-300 uppercase tracking-wider">
-                Print Settings
+                Upload Document
               </h2>
 
-              {/* Upload Drop Area */}
               <div
                 onClick={() => fileInputRef.current?.click()}
                 className="border border-dashed border-slate-700 hover:border-indigo-500/80 rounded-xl p-6 text-center cursor-pointer bg-[#070b18]/60 transition-all"
@@ -408,16 +498,15 @@ export default function ExactCustomerPrintStudio() {
                   ref={fileInputRef}
                   type="file"
                   multiple
-                  accept=".pdf,.png,.jpg,.jpeg"
+                  accept=".pdf,.png,.jpg,.jpeg,.webp"
                   className="hidden"
                   onChange={handleFilesSelect}
                 />
                 <div className="text-2xl mb-1">📄</div>
                 <div className="text-xs font-semibold text-white">Click to Upload Document / Image</div>
-                <p className="text-[10px] text-slate-500 mt-0.5">Auto-purged after printing</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">Supports PDF, PNG, JPG, JPEG, WEBP</p>
               </div>
 
-              {/* Add Another File Button */}
               <div className="text-center">
                 <button
                   type="button"
@@ -429,7 +518,6 @@ export default function ExactCustomerPrintStudio() {
                 </button>
               </div>
 
-              {/* Uploaded Files List */}
               {files.length > 0 && (
                 <div className="space-y-1.5 pt-1">
                   {files.map((f) => (
@@ -453,6 +541,112 @@ export default function ExactCustomerPrintStudio() {
                   ))}
                 </div>
               )}
+            </div>
+
+            {/* 2. LIVE PRINT PREVIEW: POSITIONED DIRECTLY BELOW UPLOAD */}
+            <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-5 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  Live Print Preview
+                </h2>
+                <span className="text-[10px] font-mono text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded">
+                  Format: {paperSize} • {orientation}
+                </span>
+              </div>
+
+              <div className="flex flex-col items-center justify-center min-h-[380px] py-2">
+                {files.length === 0 ? (
+                  <div className="text-center space-y-2 text-slate-500">
+                    <div className="text-3xl">📄</div>
+                    <p className="text-xs">Upload a file to see live sheet preview</p>
+                  </div>
+                ) : (
+                  <div className="w-full flex flex-col items-center space-y-4">
+                    {/* Sheet Canvas with Accurate Spacing */}
+                    <div
+                      className={`bg-white rounded-lg shadow-2xl transition-all duration-200 border border-slate-200 overflow-hidden flex items-center justify-center p-2 ${
+                        orientation === 'Landscape'
+                          ? paperSize === 'Legal'
+                            ? 'w-[360px] sm:w-[430px] h-[220px] sm:h-[265px]'
+                            : 'w-[320px] sm:w-[380px] h-[226px] sm:h-[268px]'
+                          : paperSize === 'Legal'
+                          ? 'w-[230px] sm:w-[270px] h-[360px] sm:h-[420px]'
+                          : 'w-[240px] sm:w-[280px] h-[340px] sm:h-[396px]'
+                      }`}
+                      style={{
+                        filter: colorMode === 'bw' ? 'grayscale(100%) contrast(110%)' : 'none',
+                      }}
+                    >
+                      <div className={`w-full h-full grid gap-1.5 ${getGridStyle()}`}>
+                        {Array.from({ length: previewItemsPerSheet }).map((_, slotIdx) => {
+                          const fileItem = currentSheetFiles[slotIdx];
+                          const isRotatedQuarter = rotation === 90 || rotation === 270;
+
+                          return (
+                            <div
+                              key={slotIdx}
+                              className="w-full h-full border border-dashed border-slate-300 rounded flex items-center justify-center overflow-hidden bg-slate-50 relative p-1"
+                            >
+                              {fileItem ? (
+                                <div className="w-full h-full flex items-center justify-center relative overflow-hidden">
+                                  <img
+                                    src={fileItem.url}
+                                    alt="slot"
+                                    className="transition-all duration-200 object-contain"
+                                    style={{
+                                      transform: `rotate(${rotation}deg)`,
+                                      maxWidth: isRotatedQuarter ? '75%' : '98%',
+                                      maxHeight: isRotatedQuarter ? '75%' : '98%',
+                                      width: isFullFit ? '100%' : 'auto',
+                                      height: isFullFit ? '100%' : 'auto',
+                                    }}
+                                  />
+                                </div>
+                              ) : (
+                                <span className="text-[9px] text-slate-400 font-mono">
+                                  [Slot {slotIdx + 1}]
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Pagination */}
+                    {totalPreviewSheets > 1 && (
+                      <div className="flex items-center gap-3 text-xs font-mono text-slate-400 pt-1">
+                        <button
+                          type="button"
+                          disabled={currentSheet <= 1}
+                          onClick={() => setCurrentSheet((prev) => Math.max(1, prev - 1))}
+                          className="px-2 py-1 bg-[#070b18] hover:bg-slate-800 disabled:opacity-30 rounded border border-slate-800 text-[11px] cursor-pointer"
+                        >
+                          ← Prev
+                        </button>
+                        <span>
+                          Sheet {currentSheet} of {totalPreviewSheets}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={currentSheet >= totalPreviewSheets}
+                          onClick={() => setCurrentSheet((prev) => Math.min(totalPreviewSheets, prev + 1))}
+                          className="px-2 py-1 bg-[#070b18] hover:bg-slate-800 disabled:opacity-30 rounded border border-slate-800 text-[11px] cursor-pointer"
+                        >
+                          Next →
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 3. PRINT SETTINGS: POSITIONED AFTER PREVIEW */}
+            <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-5 shadow-2xl space-y-4">
+              <h2 className="text-center text-xs font-bold text-slate-300 uppercase tracking-wider">
+                Print Settings & Payment
+              </h2>
 
               {/* COLOR MODE TOGGLE */}
               <div className="space-y-1 pt-1">
@@ -516,7 +710,7 @@ export default function ExactCustomerPrintStudio() {
                 </div>
               </div>
 
-              {/* PAGES PER SHEET DROPDOWN */}
+              {/* PAGES PER SHEET DROPDOWN: 1, 2, 4, 8 */}
               <div className="space-y-1">
                 <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
                   Pages Per Sheet (Collate Layout)
@@ -529,8 +723,10 @@ export default function ExactCustomerPrintStudio() {
                   }}
                   className="w-full bg-[#070b18] border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
                 >
-                  <option value={1}>1 Page per Sheet (Normal)</option>
-                  <option value={2}>2 Pages per Sheet (2-in-1)</option>
+                  <option value={1}>1 Page per Sheet (Standard 1-Up)</option>
+                  <option value={2}>2 Pages per Sheet (2-in-1 Layout)</option>
+                  <option value={4}>4 Pages per Sheet (4-in-1 Quad Layout)</option>
+                  <option value={8}>8 Pages per Sheet (8-in-1 Compact Sheet)</option>
                 </select>
               </div>
 
@@ -650,127 +846,12 @@ export default function ExactCustomerPrintStudio() {
                 onClick={handleConfirmAndPay}
                 className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-bold text-xs tracking-wider rounded-xl transition-all shadow-lg shadow-emerald-600/20 cursor-pointer disabled:cursor-not-allowed"
               >
-                {paying ? 'Uploading & Routing...' : 'Confirm and Pay'}
+                {paying ? 'Rendering & Spooling to Printer...' : 'Confirm and Pay'}
               </button>
             </div>
 
-            {/* CARD 2: LIVE PRINT PREVIEW */}
-            <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-5 shadow-2xl space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                  Live Print Preview
-                </h2>
-                <span className="text-[10px] font-mono text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded">
-                  Format: {paperSize} • {orientation}
-                </span>
-              </div>
-
-              <div className="flex flex-col items-center justify-center min-h-[380px] py-4">
-                {files.length === 0 ? (
-                  <div className="text-center space-y-2 text-slate-500">
-                    <div className="text-3xl">📄</div>
-                    <p className="text-xs">Upload a file to see live sheet preview</p>
-                  </div>
-                ) : (
-                  <div className="w-full flex flex-col items-center space-y-4">
-                    <div
-                      className={`bg-white rounded-lg shadow-2xl transition-all duration-200 border border-slate-200 overflow-hidden flex items-center justify-center ${
-                        isFullFit ? 'p-0.5 sm:p-1' : 'p-3'
-                      } ${
-                        orientation === 'Landscape'
-                          ? paperSize === 'Legal'
-                            ? 'w-[360px] sm:w-[420px] h-[220px] sm:h-[260px]'
-                            : 'w-[320px] sm:w-[380px] h-[226px] sm:h-[268px]'
-                          : paperSize === 'Legal'
-                          ? 'w-[230px] sm:w-[270px] h-[360px] sm:h-[420px]'
-                          : 'w-[240px] sm:w-[280px] h-[340px] sm:h-[396px]'
-                      }`}
-                      style={{
-                        filter: colorMode === 'bw' ? 'grayscale(100%) contrast(110%)' : 'none',
-                      }}
-                    >
-                      {pagesPerSheet === 1 ? (
-                        <div className="w-full h-full flex items-center justify-center overflow-hidden">
-                          {currentSheetFiles[0] ? (
-                            <img
-                              src={currentSheetFiles[0].url}
-                              alt="preview"
-                              className={`transition-all duration-200 ${
-                                isFullFit
-                                  ? 'w-full h-full object-contain'
-                                  : 'max-w-[88%] max-h-[88%] object-contain'
-                              }`}
-                              style={{
-                                transform: `rotate(${rotation}deg)`,
-                                width: isFullFit ? '100%' : 'auto',
-                                height: isFullFit ? '100%' : 'auto',
-                              }}
-                            />
-                          ) : (
-                            <div className="text-slate-400 text-[10px]">No Content</div>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="w-full h-full flex flex-col gap-1.5 justify-between p-1">
-                          <div className="h-[49%] w-full border border-dashed border-slate-300 rounded flex items-center justify-center overflow-hidden bg-slate-50">
-                            {currentSheetFiles[0] ? (
-                              <img
-                                src={currentSheetFiles[0].url}
-                                alt="slot-1"
-                                className="w-full h-full object-contain transition-all duration-200"
-                                style={{ transform: `rotate(${rotation}deg)` }}
-                              />
-                            ) : (
-                              <span className="text-[9px] text-slate-400 font-mono">[Page Slot 1]</span>
-                            )}
-                          </div>
-
-                          <div className="h-[49%] w-full border border-dashed border-slate-300 rounded flex items-center justify-center overflow-hidden bg-slate-50">
-                            {currentSheetFiles[1] ? (
-                              <img
-                                src={currentSheetFiles[1].url}
-                                alt="slot-2"
-                                className="w-full h-full object-contain transition-all duration-200"
-                              style={{ transform: `rotate(${rotation}deg)` }}
-                              />
-                            ) : (
-                              <span className="text-[9px] text-slate-400 font-mono">[Page Slot 2]</span>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {totalPreviewSheets > 1 && (
-                      <div className="flex items-center gap-3 text-xs font-mono text-slate-400 pt-2">
-                        <button
-                          type="button"
-                          disabled={currentSheet <= 1}
-                          onClick={() => setCurrentSheet((prev) => Math.max(1, prev - 1))}
-                          className="px-2 py-1 bg-[#070b18] hover:bg-slate-800 disabled:opacity-30 rounded border border-slate-800 text-[11px] cursor-pointer"
-                        >
-                          ← Prev
-                        </button>
-                        <span>
-                          Sheet {currentSheet} of {totalPreviewSheets}
-                        </span>
-                        <button
-                          type="button"
-                          disabled={currentSheet >= totalPreviewSheets}
-                          onClick={() => setCurrentSheet((prev) => Math.min(totalPreviewSheets, prev + 1))}
-                          className="px-2 py-1 bg-[#070b18] hover:bg-slate-800 disabled:opacity-30 rounded border border-slate-800 text-[11px] cursor-pointer"
-                        >
-                          Next →
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
           </div>
         )}
-
       </main>
     </div>
   );
