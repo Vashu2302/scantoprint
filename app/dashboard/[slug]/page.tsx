@@ -146,12 +146,10 @@ export default function VashuExactMerchantDashboard() {
     window.print();
   };
 
-  // Direct .zip download
+  // Direct .zip download via Google Drive Direct Link
   const handleDownloadSoftware = () => {
-    const { data } = supabase.storage.from('software').getPublicUrl('ScanToPrint.zip');
-    if (data?.publicUrl) {
-      window.open(data.publicUrl, '_blank');
-    }
+    const driveDirectUrl = 'https://drive.google.com/uc?export=download&id=18JXGyDe3bhBaJKgnAlqSey-4kGmrtc_j';
+    window.open(driveDirectUrl, '_blank');
   };
 
   if (loading) {
