@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 
@@ -23,10 +23,10 @@ export default function AdminSuperDashboard() {
   const [orders, setOrders] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Agent Upload State
-  const [isUploadingZip, setIsUploadingZip] = useState(false);
-  const [uploadSuccessMsg, setUploadSuccessMsg] = useState('');
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Dynamic Google Drive Agent URL State
+  const [agentDriveUrl, setAgentDriveUrl] = useState('');
+  const [isSavingUrl, setIsSavingUrl] = useState(false);
+  const [urlStatusMsg, setUrlStatusMsg] = useState('');
 
   // Check login state on mount
   useEffect(() => {
@@ -34,6 +34,7 @@ export default function AdminSuperDashboard() {
     if (sessionAuth === 'true') {
       setIsAuthenticated(true);
       fetchAdminData();
+      fetchAgentUrl();
     } else {
       setLoading(false);
     }
@@ -54,6 +55,7 @@ export default function AdminSuperDashboard() {
         sessionStorage.setItem('stp_admin_auth', 'true');
         setIsAuthenticated(true);
         fetchAdminData();
+        fetchAgentUrl();
       } else {
         setAuthError(true);
       }
@@ -86,31 +88,60 @@ export default function AdminSuperDashboard() {
     setLoading(false);
   };
 
-  // Upload ScanToPrint.zip to Supabase 'software' bucket
-  const handleZipUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Fetch current Google Drive download URL from app_settings
+  const fetchAgentUrl = async () => {
+    try {
+      const { data } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'agent_download_url')
+        .single();
 
-    setIsUploadingZip(true);
-    setUploadSuccessMsg('');
+      if (data?.value) {
+        setAgentDriveUrl(data.value);
+      } else {
+        setAgentDriveUrl('https://drive.google.com/uc?export=download&id=18JXGyDe3bhBaJKgnAlqSey-4kGmrtc_j');
+      }
+    } catch {
+      setAgentDriveUrl('https://drive.google.com/uc?export=download&id=18JXGyDe3bhBaJKgnAlqSey-4kGmrtc_j');
+    }
+  };
+
+  // Save new Google Drive link to Supabase
+  const handleSaveAgentUrl = async () => {
+    if (!agentDriveUrl.trim()) {
+      alert('Please enter a valid URL.');
+      return;
+    }
+
+    setIsSavingUrl(true);
+    setUrlStatusMsg('');
 
     try {
-      const { error } = await supabase.storage
-        .from('software')
-        .upload('ScanToPrint.zip', file, {
-          upsert: true,
-          contentType: 'application/zip',
-        });
+      let finalUrl = agentDriveUrl.trim();
+      
+      // Auto-convert standard view links to direct download links if needed
+      if (finalUrl.includes('/file/d/')) {
+        const fileId = finalUrl.split('/file/d/')[1].split('/')[0];
+        finalUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+        setAgentDriveUrl(finalUrl);
+      }
+
+      const { error } = await supabase
+        .from('app_settings')
+        .upsert(
+          { key: 'agent_download_url', value: finalUrl },
+          { onConflict: 'key' }
+        );
 
       if (error) throw error;
 
-      setUploadSuccessMsg('✓ New ScanToPrint.zip package uploaded successfully!');
-      setTimeout(() => setUploadSuccessMsg(''), 4000);
+      setUrlStatusMsg('✓ Agent download URL updated and synced across all shops!');
+      setTimeout(() => setUrlStatusMsg(''), 4000);
     } catch (err: any) {
-      alert('Upload failed: ' + err.message);
+      alert('Failed to update URL: ' + err.message);
     } finally {
-      setIsUploadingZip(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      setIsSavingUrl(false);
     }
   };
 
@@ -210,22 +241,6 @@ export default function AdminSuperDashboard() {
           </div>
 
           <div className="flex items-center gap-3">
-            <input
-              type="file"
-              ref={fileInputRef}
-              accept=".zip"
-              onChange={handleZipUpload}
-              className="hidden"
-            />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploadingZip}
-              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-800 text-white text-xs font-bold transition-all shadow-lg shadow-indigo-600/30 flex items-center gap-2 cursor-pointer"
-            >
-              <span>📦</span>
-              <span>{isUploadingZip ? 'Uploading Package...' : 'Upload PC Package (.zip)'}</span>
-            </button>
-
             <button
               onClick={handleAdminLogout}
               className="px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs font-semibold text-rose-400 hover:bg-rose-500/10 transition-all cursor-pointer"
@@ -235,11 +250,55 @@ export default function AdminSuperDashboard() {
           </div>
         </header>
 
-        {uploadSuccessMsg && (
-          <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-xs font-semibold">
-            {uploadSuccessMsg}
+        {/* ========================================================================= */}
+        {/* GOOGLE DRIVE AGENT DOWNLOAD LINK MANAGER                                 */}
+        {/* ========================================================================= */}
+        <div className="bg-[#0b1021] border border-indigo-500/30 rounded-2xl p-5 shadow-xl space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-indigo-400 font-bold text-sm">📦 Desktop Spooler Package URL (Google Drive)</span>
+                <span className="text-[10px] bg-indigo-500/10 text-indigo-300 px-2 py-0.5 rounded border border-indigo-500/20 font-mono">
+                  Bypasses 50MB Limit
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Whenever you create a new .exe, upload it to Google Drive and paste the link here. All shops will instantly get the updated file.
+              </p>
+            </div>
+            {agentDriveUrl && (
+              <a
+                href={agentDriveUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-indigo-400 hover:text-indigo-300 underline font-mono"
+              >
+                Test Download Link ↗
+              </a>
+            )}
           </div>
-        )}
+
+          <div className="flex items-center gap-3 pt-1">
+            <input
+              type="text"
+              placeholder="Paste Google Drive Direct/Share Link..."
+              value={agentDriveUrl}
+              onChange={(e) => setAgentDriveUrl(e.target.value)}
+              className="flex-1 bg-[#070b18] border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
+            />
+            <button
+              onClick={handleSaveAgentUrl}
+              disabled={isSavingUrl}
+              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-800 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-indigo-600/30 cursor-pointer whitespace-nowrap"
+            >
+              {isSavingUrl ? 'Saving...' : 'Save Link'}
+            </button>
+          </div>
+
+          {urlStatusMsg && (
+            <p className="text-xs text-emerald-400 font-semibold pt-1">{urlStatusMsg}</p>
+          )}
+        </div>
 
         {/* Global Platform Metrics */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -294,7 +353,6 @@ export default function AdminSuperDashboard() {
                   );
                   return (
                     <tr key={s.id} className="hover:bg-slate-800/20 transition-colors">
-                      {/* Clicking Name opens 360° Inspector */}
                       <td className="p-3.5">
                         <button
                           onClick={() => router.push(`/admin/shops/${s.slug}`)}
@@ -306,7 +364,6 @@ export default function AdminSuperDashboard() {
                         <div className="text-slate-400 text-[11px] mt-0.5">Owner: {s.owner_name || 'N/A'}</div>
                       </td>
 
-                      {/* Main link points directly to 360° Inspector */}
                       <td className="p-3.5 font-mono text-[11px]">
                         <button
                           onClick={() => router.push(`/admin/shops/${s.slug}`)}
