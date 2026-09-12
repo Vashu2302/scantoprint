@@ -16,6 +16,7 @@ interface UploadedDoc {
   url: string;
   file: File;
   pages: number;
+  imgObj?: HTMLImageElement;
 }
 
 export default function ExactCustomerPrintStudio() {
@@ -28,6 +29,7 @@ export default function ExactCustomerPrintStudio() {
   // Files
   const [files, setFiles] = useState<UploadedDoc[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Settings
   const [colorMode, setColorMode] = useState<'bw' | 'color'>('bw');
@@ -65,7 +67,7 @@ export default function ExactCustomerPrintStudio() {
     loadShop();
   }, [slug]);
 
-  // Instant Status Sync: Combined Realtime WebSockets + 1-Sec Polling Fallback
+  // Realtime Status Sync
   useEffect(() => {
     if (!placedOrder?.id) return;
 
@@ -105,15 +107,30 @@ export default function ExactCustomerPrintStudio() {
     };
   }, [placedOrder?.id, printStatus]);
 
-  const handleFilesSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFilesSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      const newDocs: UploadedDoc[] = Array.from(e.target.files).map((f) => ({
-        id: Math.random().toString(36).substring(2, 9),
-        name: f.name,
-        url: URL.createObjectURL(f),
-        file: f,
-        pages: 1,
-      }));
+      const selectedFiles = Array.from(e.target.files);
+      const newDocs: UploadedDoc[] = [];
+
+      for (const f of selectedFiles) {
+        const objUrl = URL.createObjectURL(f);
+        const img = new Image();
+        img.src = objUrl;
+        await new Promise((res) => {
+          img.onload = () => res(true);
+          img.onerror = () => res(true);
+        });
+
+        newDocs.push({
+          id: Math.random().toString(36).substring(2, 9),
+          name: f.name,
+          url: objUrl,
+          file: f,
+          pages: 1,
+          imgObj: img,
+        });
+      }
+
       setFiles((prev) => [...prev, ...newDocs]);
     }
   };
@@ -126,7 +143,7 @@ export default function ExactCustomerPrintStudio() {
     setRotation((prev) => (prev + 90) % 360);
   };
 
-  // Rates from shop database
+  // Rates
   const bwSingleRate = Number(shop?.bw_single ?? 2);
   const bwDoubleRate = Number(shop?.bw_double ?? 3);
   const colorSingleRate = Number(shop?.color_single ?? 10);
@@ -141,8 +158,7 @@ export default function ExactCustomerPrintStudio() {
       ? colorSingleRate
       : colorDoubleRate;
 
-  // Calculation
-  const totalPages = files.length > 0 ? files.reduce((acc, curr) => acc + curr.pages, 0) : 0;
+  const totalPages = files.length;
   const sheetsToPrint =
     totalPages > 0
       ? sideMode === 'single'
@@ -152,7 +168,6 @@ export default function ExactCustomerPrintStudio() {
 
   const totalCost = sheetsToPrint * activeRate * copies;
 
-  // Pagination for preview
   const previewItemsPerSheet = pagesPerSheet;
   const totalPreviewSheets = Math.max(1, Math.ceil(files.length / previewItemsPerSheet));
   const currentSheetFiles = files.slice(
@@ -161,14 +176,109 @@ export default function ExactCustomerPrintStudio() {
   );
 
   // =========================================================================
-  // CLIENT-SIDE WYSIWYG RENDERING: Directly renders preview to real A4 PDF
+  // CANVAS PREVIEW RENDERER (Aspect-Ratio Preserved, No Stretching)
+  // =========================================================================
+  useEffect(() => {
+    const canvas = previewCanvasRef.current;
+    if (!canvas || files.length === 0) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const isLandscape = orientation === 'Landscape';
+    let baseW = 595;
+    let baseH = 842;
+    if (paperSize === 'Legal') {
+      baseW = 612;
+      baseH = 1008;
+    }
+
+    if (isLandscape) {
+      canvas.width = baseH;
+      canvas.height = baseW;
+    } else {
+      canvas.width = baseW;
+      canvas.height = baseH;
+    }
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    let cols = 1;
+    let rows = 1;
+    if (pagesPerSheet === 2) {
+      cols = isLandscape ? 2 : 1;
+      rows = isLandscape ? 1 : 2;
+    } else if (pagesPerSheet === 4) {
+      cols = 2;
+      rows = 2;
+    } else if (pagesPerSheet === 8) {
+      cols = isLandscape ? 4 : 2;
+      rows = isLandscape ? 2 : 4;
+    }
+
+    const cellW = canvas.width / cols;
+    const cellH = canvas.height / rows;
+
+    for (let i = 0; i < currentSheetFiles.length; i++) {
+      const item = currentSheetFiles[i];
+      if (!item.imgObj) continue;
+
+      const img = item.imgObj;
+      const cX = (i % cols) * cellW;
+      const cY = Math.floor(i / cols) * cellH;
+
+      ctx.save();
+      ctx.translate(cX + cellW / 2, cY + cellH / 2);
+      ctx.rotate((rotation * Math.PI) / 180);
+
+      let imgW = img.naturalWidth || img.width;
+      let imgH = img.naturalHeight || img.height;
+
+      if (rotation === 90 || rotation === 270) {
+        const temp = imgW;
+        imgW = imgH;
+        imgH = temp;
+      }
+
+      // Mathematical Scaling preserving exact proportions
+      const padding = isFullFit ? 4 : 20;
+      const scale = Math.min((cellW - padding) / imgW, (cellH - padding) / imgH);
+      const drawW = (img.naturalWidth || img.width) * scale;
+      const drawH = (img.naturalHeight || img.height) * scale;
+
+      ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
+      ctx.restore();
+
+      // Border guidelines
+      ctx.strokeStyle = '#e2e8f0';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(cX, cY, cellW, cellH);
+    }
+
+    // Apply Grayscale Filter for B&W
+    if (colorMode === 'bw') {
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imgData.data;
+      for (let p = 0; p < data.length; p += 4) {
+        const avg = 0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2];
+        data[p] = avg;
+        data[p + 1] = avg;
+        data[p + 2] = avg;
+      }
+      ctx.putImageData(imgData, 0, 0);
+    }
+  }, [files, currentSheet, pagesPerSheet, orientation, paperSize, rotation, colorMode, isFullFit]);
+
+  // =========================================================================
+  // CLIENT-SIDE WYSIWYG MERGED PDF GENERATOR (Uses Exact Canvas Math)
   // =========================================================================
   const generatePreviewMatchedPdf = async (): Promise<Blob> => {
     const isLandscape = orientation === 'Landscape';
     const pdf = new jsPDF({
       orientation: isLandscape ? 'landscape' : 'portrait',
-      unit: 'mm',
-      format: paperSize === 'Legal' ? 'legal' : 'a4',
+      unit: 'pt',
+      format: paperSize === 'Legal' ? [612, 1008] : 'a4',
     });
 
     const pageWidth = pdf.internal.pageSize.getWidth();
@@ -187,8 +297,8 @@ export default function ExactCustomerPrintStudio() {
       rows = isLandscape ? 2 : 4;
     }
 
-    const cellWidth = pageWidth / cols;
-    const cellHeight = pageHeight / rows;
+    const cellW = pageWidth / cols;
+    const cellH = pageHeight / rows;
 
     for (let s = 0; s < totalPreviewSheets; s++) {
       if (s > 0) pdf.addPage();
@@ -197,66 +307,59 @@ export default function ExactCustomerPrintStudio() {
 
       for (let i = 0; i < batchFiles.length; i++) {
         const item = batchFiles[i];
-        const colIdx = i % cols;
-        const rowIdx = Math.floor(i / cols);
+        if (!item.imgObj) continue;
 
-        const targetX = colIdx * cellWidth;
-        const targetY = rowIdx * cellHeight;
+        const img = item.imgObj;
+        const cX = (i % cols) * cellW;
+        const cY = Math.floor(i / cols) * cellH;
 
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        if (!ctx) continue;
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = Math.floor(cellW * 2); // 2x resolution for crisp print
+        tempCanvas.height = Math.floor(cellH * 2);
+        const tempCtx = tempCanvas.getContext('2d');
+        if (!tempCtx) continue;
 
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.src = item.url;
-        await new Promise((res) => {
-          img.onload = () => res(true);
-          img.onerror = () => res(true);
-        });
+        tempCtx.fillStyle = '#ffffff';
+        tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
 
-        const isRotatedQuarter = rotation === 90 || rotation === 270;
-        canvas.width = isRotatedQuarter ? img.naturalHeight : img.naturalWidth;
-        canvas.height = isRotatedQuarter ? img.naturalWidth : img.naturalHeight;
+        tempCtx.save();
+        tempCtx.translate(tempCanvas.width / 2, tempCanvas.height / 2);
+        tempCtx.rotate((rotation * Math.PI) / 180);
 
-        ctx.translate(canvas.width / 2, canvas.height / 2);
-        ctx.rotate((rotation * Math.PI) / 180);
-        ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
+        let imgW = img.naturalWidth || img.width;
+        let imgH = img.naturalHeight || img.height;
 
-        // Real grayscale pixel-conversion if B&W
+        if (rotation === 90 || rotation === 270) {
+          const temp = imgW;
+          imgW = imgH;
+          imgH = temp;
+        }
+
+        const padding = isFullFit ? 4 : 20;
+        const scale = Math.min(
+          (tempCanvas.width - padding * 2) / imgW,
+          (tempCanvas.height - padding * 2) / imgH
+        );
+        const drawW = (img.naturalWidth || img.width) * scale;
+        const drawH = (img.naturalHeight || img.height) * scale;
+
+        tempCtx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
+        tempCtx.restore();
+
         if (colorMode === 'bw') {
-          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const imgData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
           const d = imgData.data;
           for (let p = 0; p < d.length; p += 4) {
-            const gray = 0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2];
-            d[p] = gray;
-            d[p + 1] = gray;
-            d[p + 2] = gray;
+            const avg = 0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2];
+            d[p] = avg;
+            d[p + 1] = avg;
+            d[p + 2] = avg;
           }
-          ctx.putImageData(imgData, 0, 0);
+          tempCtx.putImageData(imgData, 0, 0);
         }
 
-        const renderedDataUrl = canvas.toDataURL('image/jpeg', 0.95);
-
-        // Aspect ratio fitting inside cell slot without excessive margins
-        const margin = isFullFit ? 0 : 2;
-        const maxW = cellWidth - margin * 2;
-        const maxH = cellHeight - margin * 2;
-
-        let finalW = maxW;
-        let finalH = maxH;
-        let finalX = targetX + margin;
-        let finalY = targetY + margin;
-
-        if (!isFullFit) {
-          const ratio = Math.min(maxW / canvas.width, maxH / canvas.height);
-          finalW = canvas.width * ratio;
-          finalH = canvas.height * ratio;
-          finalX = targetX + (cellWidth - finalW) / 2;
-          finalY = targetY + (cellHeight - finalH) / 2;
-        }
-
-        pdf.addImage(renderedDataUrl, 'JPEG', finalX, finalY, finalW, finalH);
+        const dataUri = tempCanvas.toDataURL('image/jpeg', 0.95);
+        pdf.addImage(dataUri, 'JPEG', cX, cY, cellW, cellH);
       }
     }
 
@@ -271,12 +374,10 @@ export default function ExactCustomerPrintStudio() {
 
     setPaying(true);
     try {
-      // 1. Client-Side Rendering of the final document
       const pdfBlob = await generatePreviewMatchedPdf();
       const cleanFileName = `print_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.pdf`;
       const filePath = `${shop.id}/${cleanFileName}`;
 
-      // 2. Upload compiled PDF to Supabase Storage 'print-files'
       const { error: uploadError } = await supabase.storage
         .from('print-files')
         .upload(filePath, pdfBlob, {
@@ -285,18 +386,14 @@ export default function ExactCustomerPrintStudio() {
           upsert: true,
         });
 
-      if (uploadError) {
-        throw new Error('File storage failed: ' + uploadError.message);
-      }
+      if (uploadError) throw new Error('File upload failed: ' + uploadError.message);
 
-      // 3. Obtain Public Storage URL
       const { data: publicData } = supabase.storage
         .from('print-files')
         .getPublicUrl(filePath);
 
       const uploadedUrl = publicData?.publicUrl || '';
 
-      // 4. Save Order Payload
       const orderPayload = {
         shop_id: shop.id,
         file_name: cleanFileName,
@@ -360,20 +457,12 @@ export default function ExactCustomerPrintStudio() {
 
   const shopTitle = shop.business_name || shop.name || 'Store';
   const shopInitial = shopTitle.trim().charAt(0).toUpperCase() || 'S';
-
   const isCompleted = printStatus === 'completed' || printStatus === 'printed';
   const isPrinting = printStatus === 'printing' || printStatus === 'processing';
 
-  const getGridStyle = () => {
-    if (pagesPerSheet === 2) return 'grid-cols-1 grid-rows-2';
-    if (pagesPerSheet === 4) return 'grid-cols-2 grid-rows-2';
-    if (pagesPerSheet === 8) return orientation === 'Landscape' ? 'grid-cols-4 grid-rows-2' : 'grid-cols-2 grid-rows-4';
-    return 'grid-cols-1 grid-rows-1';
-  };
-
   return (
     <div className="min-h-screen bg-[#060813] text-slate-200 font-sans selection:bg-indigo-600 selection:text-white pb-16">
-      {/* Top Navbar */}
+      {/* Top Header */}
       <header className="border-b border-slate-800/80 bg-[#090d1c]/90 px-4 sm:px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-xs shadow-md shadow-indigo-600/30">
@@ -387,16 +476,15 @@ export default function ExactCustomerPrintStudio() {
             </p>
           </div>
         </div>
-
         <div className="text-[11px] text-slate-400 font-mono bg-slate-900 px-3 py-1 rounded-full border border-slate-800">
           Encrypted Spool
         </div>
       </header>
 
-      {/* Main Container */}
+      {/* Main Form */}
       <main className="max-w-3xl mx-auto px-4 pt-6">
         {placedOrder ? (
-          /* ==================== PAGE 2: PAYMENT SUCCESSFUL & LIVE QUEUE ==================== */
+          /* ==================== SUCCESSFUL ORDER SCREEN ==================== */
           <div className="bg-[#0b1021] border border-slate-800/90 rounded-3xl p-6 sm:p-10 shadow-2xl space-y-6 text-center animate-in fade-in zoom-in-95 duration-200">
             <div className="w-16 h-16 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-3xl flex items-center justify-center mx-auto text-3xl shadow-lg shadow-emerald-500/10">
               ✓
@@ -414,7 +502,6 @@ export default function ExactCustomerPrintStudio() {
               </p>
             </div>
 
-            {/* Receipt Box */}
             <div className="bg-[#070b18] border border-slate-800/90 rounded-2xl p-5 text-left text-xs font-mono space-y-2.5 max-w-md mx-auto">
               <div className="flex justify-between items-center pb-2 border-b border-slate-800">
                 <span className="text-slate-500 font-sans">Order ID:</span>
@@ -432,7 +519,6 @@ export default function ExactCustomerPrintStudio() {
               </div>
             </div>
 
-            {/* Live Queue Tracker */}
             <div className="bg-[#070b18] border border-slate-800/90 rounded-2xl p-5 max-w-md mx-auto space-y-3">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-slate-400 font-medium">Printer Status:</span>
@@ -487,10 +573,10 @@ export default function ExactCustomerPrintStudio() {
             </button>
           </div>
         ) : (
-          /* ==================== PAGE 1: UPLOAD & LIVE PREVIEW FIRST ==================== */
+          /* ==================== MAIN STUDIO SCREEN ==================== */
           <div className="space-y-6">
             
-            {/* 1. UPLOAD CONTAINER */}
+            {/* 1. UPLOAD BOX */}
             <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-5 shadow-2xl space-y-4">
               <h2 className="text-center text-xs font-bold text-slate-300 uppercase tracking-wider">
                 Upload Document
@@ -549,7 +635,7 @@ export default function ExactCustomerPrintStudio() {
               )}
             </div>
 
-            {/* 2. LIVE PRINT PREVIEW */}
+            {/* 2. LIVE PRINT PREVIEW (Accurate Canvas Rendering) */}
             <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-5 shadow-2xl space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
@@ -568,58 +654,15 @@ export default function ExactCustomerPrintStudio() {
                   </div>
                 ) : (
                   <div className="w-full flex flex-col items-center space-y-4">
-                    <div
-                      className={`bg-white rounded-lg shadow-2xl transition-all duration-200 border border-slate-200 overflow-hidden flex items-center justify-center p-1.5 ${
-                        orientation === 'Landscape'
-                          ? paperSize === 'Legal'
-                            ? 'w-[360px] sm:w-[430px] h-[220px] sm:h-[265px]'
-                            : 'w-[320px] sm:w-[380px] h-[226px] sm:h-[268px]'
-                          : paperSize === 'Legal'
-                          ? 'w-[230px] sm:w-[270px] h-[360px] sm:h-[420px]'
-                          : 'w-[240px] sm:w-[280px] h-[340px] sm:h-[396px]'
-                      }`}
-                      style={{
-                        filter: colorMode === 'bw' ? 'grayscale(100%) contrast(110%)' : 'none',
-                      }}
-                    >
-                      <div className={`w-full h-full grid gap-1.5 ${getGridStyle()}`}>
-                        {Array.from({ length: previewItemsPerSheet }).map((_, slotIdx) => {
-                          const fileItem = currentSheetFiles[slotIdx];
-                          const isRotatedQuarter = rotation === 90 || rotation === 270;
-
-                          return (
-                            <div
-                              key={slotIdx}
-                              className="w-full h-full border border-dashed border-slate-300 rounded flex items-center justify-center overflow-hidden bg-slate-50 relative p-0.5"
-                            >
-                              {fileItem ? (
-                                <div className="w-full h-full flex items-center justify-center relative overflow-hidden bg-white">
-                                  <img
-                                    src={fileItem.url}
-                                    alt="slot"
-                                    className="transition-all duration-200"
-                                    style={{
-                                      transform: `rotate(${rotation}deg)`,
-                                      width: isRotatedQuarter ? (isFullFit ? '100%' : 'auto') : '100%',
-                                      height: isRotatedQuarter ? (isFullFit ? '100%' : 'auto') : '100%',
-                                      maxWidth: isRotatedQuarter ? 'none' : '100%',
-                                      maxHeight: isRotatedQuarter ? 'none' : '100%',
-                                      objectFit: isFullFit ? 'fill' : 'contain',
-                                    }}
-                                  />
-                                </div>
-                              ) : (
-                                <span className="text-[9px] text-slate-400 font-mono">
-                                  [Slot {slotIdx + 1}]
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
+                    {/* HTML5 Canvas with Native Aspect-Ratio Scaling */}
+                    <div className="bg-slate-900/50 p-2 rounded-xl border border-slate-800 flex items-center justify-center max-w-full">
+                      <canvas
+                        ref={previewCanvasRef}
+                        className="bg-white rounded shadow-2xl transition-all duration-200 border border-slate-300 max-w-full max-h-[440px] h-auto object-contain"
+                      />
                     </div>
 
-                    {/* Pagination */}
+                    {/* Navigation */}
                     {totalPreviewSheets > 1 && (
                       <div className="flex items-center gap-3 text-xs font-mono text-slate-400 pt-1">
                         <button
@@ -648,13 +691,13 @@ export default function ExactCustomerPrintStudio() {
               </div>
             </div>
 
-            {/* 3. PRINT SETTINGS: POSITIONED AFTER PREVIEW */}
+            {/* 3. SETTINGS & PAYMENT */}
             <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-5 shadow-2xl space-y-4">
               <h2 className="text-center text-xs font-bold text-slate-300 uppercase tracking-wider">
                 Print Settings & Payment
               </h2>
 
-              {/* COLOR MODE TOGGLE */}
+              {/* COLOR MODE */}
               <div className="space-y-1 pt-1">
                 <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
                   Color Mode
@@ -685,7 +728,7 @@ export default function ExactCustomerPrintStudio() {
                 </div>
               </div>
 
-              {/* PRINTING SIDE TOGGLE */}
+              {/* SIDES */}
               <div className="space-y-1">
                 <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
                   Printing Side
@@ -716,7 +759,7 @@ export default function ExactCustomerPrintStudio() {
                 </div>
               </div>
 
-              {/* PAGES PER SHEET DROPDOWN: 1, 2, 4, 8 */}
+              {/* N-UP */}
               <div className="space-y-1">
                 <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
                   Pages Per Sheet (Collate Layout)
@@ -736,7 +779,7 @@ export default function ExactCustomerPrintStudio() {
                 </select>
               </div>
 
-              {/* PAGE RANGE DROPDOWN */}
+              {/* RANGE */}
               <div className="space-y-1">
                 <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
                   Page Range
@@ -803,7 +846,7 @@ export default function ExactCustomerPrintStudio() {
                   }`}
                 >
                   <span>⛶</span>
-                  <span>{isFullFit ? 'Fit Page: Edge Fit' : 'Fit Page: Standard'}</span>
+                  <span>{isFullFit ? 'Fit Page: Edge Fit' : 'Fit Page: Auto Margin'}</span>
                 </button>
               </div>
 
