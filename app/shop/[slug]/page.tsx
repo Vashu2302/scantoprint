@@ -45,7 +45,7 @@ export default function ExactCustomerPrintStudio() {
   // Preview Pagination
   const [currentSheet, setCurrentSheet] = useState<number>(1);
 
-  // Payment & Success Screen States
+  // Payment & Screen States
   const [paying, setPaying] = useState<boolean>(false);
   const [placedOrder, setPlacedOrder] = useState<any>(null);
   const [printStatus, setPrintStatus] = useState<string>('queued');
@@ -67,7 +67,7 @@ export default function ExactCustomerPrintStudio() {
     loadShop();
   }, [slug]);
 
-  // Realtime Status Sync
+  // Realtime Status Tracking
   useEffect(() => {
     if (!placedOrder?.id) return;
 
@@ -143,7 +143,7 @@ export default function ExactCustomerPrintStudio() {
     setRotation((prev) => (prev + 90) % 360);
   };
 
-  // Rates
+  // Pricing
   const bwSingleRate = Number(shop?.bw_single ?? 2);
   const bwDoubleRate = Number(shop?.bw_double ?? 3);
   const colorSingleRate = Number(shop?.color_single ?? 10);
@@ -176,7 +176,7 @@ export default function ExactCustomerPrintStudio() {
   );
 
   // =========================================================================
-  // CANVAS PREVIEW RENDERER (Aspect-Ratio Preserved, No Stretching)
+  // CANVAS PREVIEW RENDERER (Aspect-Ratio Lock)
   // =========================================================================
   useEffect(() => {
     const canvas = previewCanvasRef.current;
@@ -241,7 +241,6 @@ export default function ExactCustomerPrintStudio() {
         imgH = temp;
       }
 
-      // Mathematical Scaling preserving exact proportions
       const padding = isFullFit ? 4 : 20;
       const scale = Math.min((cellW - padding) / imgW, (cellH - padding) / imgH);
       const drawW = (img.naturalWidth || img.width) * scale;
@@ -250,13 +249,11 @@ export default function ExactCustomerPrintStudio() {
       ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
       ctx.restore();
 
-      // Border guidelines
       ctx.strokeStyle = '#e2e8f0';
       ctx.lineWidth = 1;
       ctx.strokeRect(cX, cY, cellW, cellH);
     }
 
-    // Apply Grayscale Filter for B&W
     if (colorMode === 'bw') {
       const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = imgData.data;
@@ -271,7 +268,7 @@ export default function ExactCustomerPrintStudio() {
   }, [files, currentSheet, pagesPerSheet, orientation, paperSize, rotation, colorMode, isFullFit]);
 
   // =========================================================================
-  // CLIENT-SIDE WYSIWYG MERGED PDF GENERATOR (Uses Exact Canvas Math)
+  // CLIENT-SIDE MERGED MULTI-PAGE PDF GENERATOR
   // =========================================================================
   const generatePreviewMatchedPdf = async (): Promise<Blob> => {
     const isLandscape = orientation === 'Landscape';
@@ -301,7 +298,9 @@ export default function ExactCustomerPrintStudio() {
     const cellH = pageHeight / rows;
 
     for (let s = 0; s < totalPreviewSheets; s++) {
-      if (s > 0) pdf.addPage();
+      if (s > 0) {
+        pdf.addPage(paperSize === 'Legal' ? [612, 1008] : 'a4', isLandscape ? 'landscape' : 'portrait');
+      }
 
       const batchFiles = files.slice(s * previewItemsPerSheet, (s + 1) * previewItemsPerSheet);
 
@@ -314,7 +313,7 @@ export default function ExactCustomerPrintStudio() {
         const cY = Math.floor(i / cols) * cellH;
 
         const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = Math.floor(cellW * 2); // 2x resolution for crisp print
+        tempCanvas.width = Math.floor(cellW * 2);
         tempCanvas.height = Math.floor(cellH * 2);
         const tempCtx = tempCanvas.getContext('2d');
         if (!tempCtx) continue;
@@ -397,7 +396,7 @@ export default function ExactCustomerPrintStudio() {
       const orderPayload = {
         shop_id: shop.id,
         file_name: cleanFileName,
-        pages: sheetsToPrint,
+        pages: totalPreviewSheets,
         copies: copies,
         amount: totalCost,
         payment_status: 'paid',
@@ -462,7 +461,6 @@ export default function ExactCustomerPrintStudio() {
 
   return (
     <div className="min-h-screen bg-[#060813] text-slate-200 font-sans selection:bg-indigo-600 selection:text-white pb-16">
-      {/* Top Header */}
       <header className="border-b border-slate-800/80 bg-[#090d1c]/90 px-4 sm:px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-xs shadow-md shadow-indigo-600/30">
@@ -481,10 +479,8 @@ export default function ExactCustomerPrintStudio() {
         </div>
       </header>
 
-      {/* Main Form */}
       <main className="max-w-3xl mx-auto px-4 pt-6">
         {placedOrder ? (
-          /* ==================== SUCCESSFUL ORDER SCREEN ==================== */
           <div className="bg-[#0b1021] border border-slate-800/90 rounded-3xl p-6 sm:p-10 shadow-2xl space-y-6 text-center animate-in fade-in zoom-in-95 duration-200">
             <div className="w-16 h-16 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-3xl flex items-center justify-center mx-auto text-3xl shadow-lg shadow-emerald-500/10">
               ✓
@@ -541,22 +537,22 @@ export default function ExactCustomerPrintStudio() {
                 <div className="text-[11px] text-slate-400 text-left bg-slate-900/60 p-3 rounded-xl border border-slate-800/60 space-y-1 font-sans">
                   <div className="flex items-center gap-2 text-indigo-300 font-medium">
                     <span>⏱️ Estimated Waiting Time:</span>
-                    <span className="font-bold font-mono">~2-3 Minutes</span>
+                    <span className="font-bold font-mono">~1-2 Minutes</span>
                   </div>
                   <p className="text-[10px] text-slate-500">
-                    Please wait near the counter. Your print will be ready shortly.
+                    Your physical print is currently being fed through the roller.
                   </p>
                 </div>
               )}
 
               {isCompleted && (
-                <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-center space-y-1.5 animate-in fade-in zoom-in-95 duration-200">
+                <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-center space-y-1.5">
                   <p className="text-xs font-bold text-emerald-400 flex items-center justify-center gap-1.5">
                     <span>✨</span>
                     <span>Print Completed Successfully!</span>
                   </p>
                   <p className="text-[11px] text-slate-200 leading-relaxed font-sans">
-                    🔒 For your privacy, we have permanently deleted your document from our server.
+                    🔒 For your privacy, your file was shredded from memory and permanently wiped.
                   </p>
                 </div>
               )}
@@ -573,10 +569,7 @@ export default function ExactCustomerPrintStudio() {
             </button>
           </div>
         ) : (
-          /* ==================== MAIN STUDIO SCREEN ==================== */
           <div className="space-y-6">
-            
-            {/* 1. UPLOAD BOX */}
             <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-5 shadow-2xl space-y-4">
               <h2 className="text-center text-xs font-bold text-slate-300 uppercase tracking-wider">
                 Upload Document
@@ -635,7 +628,6 @@ export default function ExactCustomerPrintStudio() {
               )}
             </div>
 
-            {/* 2. LIVE PRINT PREVIEW (Accurate Canvas Rendering) */}
             <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-5 shadow-2xl space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
@@ -654,7 +646,6 @@ export default function ExactCustomerPrintStudio() {
                   </div>
                 ) : (
                   <div className="w-full flex flex-col items-center space-y-4">
-                    {/* HTML5 Canvas with Native Aspect-Ratio Scaling */}
                     <div className="bg-slate-900/50 p-2 rounded-xl border border-slate-800 flex items-center justify-center max-w-full">
                       <canvas
                         ref={previewCanvasRef}
@@ -662,7 +653,6 @@ export default function ExactCustomerPrintStudio() {
                       />
                     </div>
 
-                    {/* Navigation */}
                     {totalPreviewSheets > 1 && (
                       <div className="flex items-center gap-3 text-xs font-mono text-slate-400 pt-1">
                         <button
@@ -691,13 +681,11 @@ export default function ExactCustomerPrintStudio() {
               </div>
             </div>
 
-            {/* 3. SETTINGS & PAYMENT */}
             <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-5 shadow-2xl space-y-4">
               <h2 className="text-center text-xs font-bold text-slate-300 uppercase tracking-wider">
                 Print Settings & Payment
               </h2>
 
-              {/* COLOR MODE */}
               <div className="space-y-1 pt-1">
                 <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
                   Color Mode
@@ -728,7 +716,6 @@ export default function ExactCustomerPrintStudio() {
                 </div>
               </div>
 
-              {/* SIDES */}
               <div className="space-y-1">
                 <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
                   Printing Side
@@ -759,7 +746,6 @@ export default function ExactCustomerPrintStudio() {
                 </div>
               </div>
 
-              {/* N-UP */}
               <div className="space-y-1">
                 <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
                   Pages Per Sheet (Collate Layout)
@@ -779,7 +765,6 @@ export default function ExactCustomerPrintStudio() {
                 </select>
               </div>
 
-              {/* RANGE */}
               <div className="space-y-1">
                 <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
                   Page Range
@@ -794,7 +779,6 @@ export default function ExactCustomerPrintStudio() {
                 </select>
               </div>
 
-              {/* PAPER SIZE & ORIENTATION */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
@@ -825,14 +809,13 @@ export default function ExactCustomerPrintStudio() {
                 </div>
               </div>
 
-              {/* ROTATE & FIT TO PAGE BUTTONS */}
               <div className="grid grid-cols-2 gap-3 pt-1">
                 <button
                   type="button"
                   onClick={handleRotate}
-                  className="py-2.5 px-3 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-bold text-xs rounded-xl transition-all shadow-lg shadow-blue-600/25 flex items-center justify-center gap-1.5 border border-blue-400/30 cursor-pointer"
+                  className="py-2.5 px-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl transition-all shadow-lg flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  <span className="text-base leading-none">↺</span>
+                  <span>↺</span>
                   <span>Rotate ({rotation}°)</span>
                 </button>
 
@@ -841,8 +824,8 @@ export default function ExactCustomerPrintStudio() {
                   onClick={() => setIsFullFit((prev) => !prev)}
                   className={`py-2.5 px-3 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 border cursor-pointer ${
                     isFullFit
-                      ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg shadow-indigo-600/30'
-                      : 'bg-[#070b18] border-slate-800 text-slate-300 hover:border-slate-700'
+                      ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg'
+                      : 'bg-[#070b18] border-slate-800 text-slate-300'
                   }`}
                 >
                   <span>⛶</span>
@@ -850,7 +833,6 @@ export default function ExactCustomerPrintStudio() {
                 </button>
               </div>
 
-              {/* NUMBER OF COPIES */}
               <div className="space-y-1">
                 <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
                   Number of Copies
@@ -876,7 +858,6 @@ export default function ExactCustomerPrintStudio() {
                 </div>
               </div>
 
-              {/* COST SUMMARY */}
               <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs">
                 <div className="space-y-0.5 text-slate-400 text-[11px]">
                   <div>Total Pages: <span className="font-mono text-slate-200">{totalPages}</span></div>
@@ -888,17 +869,15 @@ export default function ExactCustomerPrintStudio() {
                 </div>
               </div>
 
-              {/* SUBMIT BUTTON */}
               <button
                 type="button"
                 disabled={paying || files.length === 0}
                 onClick={handleConfirmAndPay}
-                className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-bold text-xs tracking-wider rounded-xl transition-all shadow-lg shadow-emerald-600/20 cursor-pointer disabled:cursor-not-allowed"
+                className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-bold text-xs tracking-wider rounded-xl transition-all shadow-lg cursor-pointer"
               >
                 {paying ? 'Rendering & Spooling to Printer...' : 'Confirm and Pay'}
               </button>
             </div>
-
           </div>
         )}
       </main>
