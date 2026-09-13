@@ -50,6 +50,16 @@ export default function ExactCustomerPrintStudio() {
   const [placedOrder, setPlacedOrder] = useState<any>(null);
   const [printStatus, setPrintStatus] = useState<string>('queued');
 
+  // Total uploaded files count
+  const totalPages = files.length;
+
+  // Single page guard: Auto reset to single-sided if only 1 page is present
+  useEffect(() => {
+    if (totalPages <= 1 && sideMode === 'double') {
+      setSideMode('single');
+    }
+  }, [totalPages, sideMode]);
+
   useEffect(() => {
     async function loadShop() {
       if (!slug) return;
@@ -158,7 +168,6 @@ export default function ExactCustomerPrintStudio() {
       ? colorSingleRate
       : colorDoubleRate;
 
-  const totalPages = files.length;
   const sheetsToPrint =
     totalPages > 0
       ? sideMode === 'single'
@@ -716,6 +725,7 @@ export default function ExactCustomerPrintStudio() {
                 </div>
               </div>
 
+              {/* SIDES (Auto-Faded & Disabled when totalPages <= 1) */}
               <div className="space-y-1">
                 <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
                   Printing Side
@@ -732,14 +742,19 @@ export default function ExactCustomerPrintStudio() {
                   >
                     Single-Sided
                   </button>
+
                   <button
                     type="button"
+                    disabled={totalPages <= 1}
                     onClick={() => setSideMode('double')}
-                    className={`py-2 px-3 rounded-xl text-xs font-medium transition-all cursor-pointer ${
-                      sideMode === 'double'
-                        ? 'bg-indigo-600 text-white shadow'
-                        : 'bg-[#070b18] text-slate-400 border border-slate-800 hover:border-slate-700'
+                    className={`py-2 px-3 rounded-xl text-xs font-medium transition-all ${
+                      totalPages <= 1
+                        ? 'opacity-30 cursor-not-allowed bg-[#070b18] text-slate-500 border border-slate-800/50'
+                        : sideMode === 'double'
+                        ? 'bg-indigo-600 text-white shadow cursor-pointer'
+                        : 'bg-[#070b18] text-slate-400 border border-slate-800 hover:border-slate-700 cursor-pointer'
                     }`}
+                    title={totalPages <= 1 ? 'Double-sided printing requires at least 2 pages' : ''}
                   >
                     Double-Sided
                   </button>
