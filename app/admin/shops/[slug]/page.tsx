@@ -34,9 +34,9 @@ export default function ShopInspector360AdminPage() {
   }, []);
 
   useEffect(() => {
-    async function loadData() {
+    async function loadData(isInitial = false) {
       if (!slug) return;
-      setLoading(true);
+      if (isInitial) setLoading(true);
 
       const { data: shopData } = await supabase
         .from('shops')
@@ -46,7 +46,11 @@ export default function ShopInspector360AdminPage() {
 
       if (shopData) {
         setShop(shopData);
-        setSelectedPlan(shopData.plan_type || 'trial');
+        // Only set selectedPlan on initial load so background polling doesn't overwrite admin's selection
+        if (isInitial) {
+          setSelectedPlan(shopData.plan_type || 'trial');
+        }
+
         const { data: ordersData } = await supabase
           .from('orders')
           .select('*')
@@ -56,10 +60,10 @@ export default function ShopInspector360AdminPage() {
         if (ordersData) setOrders(ordersData);
       }
 
-      setLoading(false);
+      if (isInitial) setLoading(false);
     }
 
-    loadData();
+    loadData(true);
 
     const shopChan = supabase
       .channel(`inspect_shop_${slug}`)
@@ -69,7 +73,6 @@ export default function ShopInspector360AdminPage() {
         (payload: any) => {
           if (payload.new && payload.new.slug === slug) {
             setShop(payload.new);
-            setSelectedPlan(payload.new.plan_type || 'trial');
           }
         }
       )
@@ -92,14 +95,14 @@ export default function ShopInspector360AdminPage() {
       )
       .subscribe();
 
-    const poll = setInterval(loadData, 4000);
+    const poll = setInterval(() => loadData(false), 5000);
 
     return () => {
       supabase.removeChannel(shopChan);
       supabase.removeChannel(ordersChan);
       clearInterval(poll);
     };
-  }, [slug, shop?.id]);
+  }, [slug]);
 
   const copySpoolerKey = () => {
     if (!shop?.api_key) return;
@@ -125,8 +128,11 @@ export default function ShopInspector360AdminPage() {
     ? 0
     : Math.ceil((currentSubEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 
-  // Calculate project new end date based on buffer
+  // Calculate projected new end date based on buffer
   const calculateNewEndDate = () => {
+    if (addedDaysBuffer === 0) {
+      return currentSubEnd;
+    }
     const baseDate = isCurrentlyExpired ? new Date() : new Date(currentSubEnd);
     baseDate.setDate(baseDate.getDate() + addedDaysBuffer);
     return baseDate;
@@ -138,29 +144,34 @@ export default function ShopInspector360AdminPage() {
     setIsSavingSub(true);
     try {
       const newEnd = calculateNewEndDate();
-      const pageLimit = selectedPlan === 'premium' ? 999999 : selectedPlan === 'standard' ? 500 : 500;
+      const pageLimit = selectedPlan === 'premium' ? 999999 : 500;
+
+      const updatePayload: any = {
+        plan_type: selectedPlan,
+        page_limit: pageLimit,
+      };
+
+      // Only change subscription_end if admin explicitly clicked +28 days
+      if (addedDaysBuffer > 0) {
+        updatePayload.subscription_end = newEnd.toISOString();
+      }
 
       const { error } = await supabase
         .from('shops')
-        .update({
-          plan_type: selectedPlan,
-          subscription_end: newEnd.toISOString(),
-          page_limit: pageLimit,
-        })
+        .update(updatePayload)
         .eq('id', shop.id);
 
       if (error) throw error;
 
+      // Update local state immediately
       setShop((prev: any) => ({
         ...prev,
-        plan_type: selectedPlan,
-        subscription_end: newEnd.toISOString(),
-        page_limit: pageLimit,
+        ...updatePayload,
       }));
 
       setAddedDaysBuffer(0);
       setShowConfirmModal(false);
-      setSubStatusMessage('✓ Subscription updated successfully!');
+      setSubStatusMessage(`✓ Switched to ${selectedPlan.toUpperCase()} tier successfully!`);
       setTimeout(() => setSubStatusMessage(''), 4000);
     } catch (err: any) {
       alert('Subscription update failed: ' + err.message);
@@ -347,7 +358,13 @@ export default function ShopInspector360AdminPage() {
 
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-400">Current Plan:</span>
-              <span className="text-xs font-mono font-bold uppercase px-3 py-1 rounded-full bg-indigo-500/15 text-indigo-400 border border-indigo-500/30">
+              <span className={`text-xs font-mono font-bold uppercase px-3 py-1 rounded-full border ${
+                shop.plan_type === 'premium'
+                  ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                  : shop.plan_type === 'standard'
+                  ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30'
+                  : 'bg-slate-800 text-slate-300 border-slate-700'
+              }`}>
                 {shop.plan_type || 'TRIAL'}
               </span>
               {isCurrentlyExpired ? (
@@ -414,7 +431,7 @@ export default function ShopInspector360AdminPage() {
                 {addedDaysBuffer > 0 ? (
                   <span>Adding: <strong className="text-emerald-400">+{addedDaysBuffer} Days</strong> ({addedDaysBuffer / 28} cycles)</span>
                 ) : (
-                  <span className="text-slate-500">Click &apos;+ 28 Days&apos; to extend.</span>
+                  <span className="text-slate-500">Only tier will switch unless days are added.</span>
                 )}
               </div>
             </div>
@@ -712,7 +729,9 @@ export default function ShopInspector360AdminPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500 font-sans">Buffer Added:</span>
-                <span className="font-bold text-emerald-400">+{addedDaysBuffer} Days</span>
+                <span className="font-bold text-emerald-400">
+                  {addedDaysBuffer > 0 ? `+${addedDaysBuffer} Days` : 'No days added (Tier change only)'}
+                </span>
               </div>
               <div className="flex justify-between border-t border-slate-800/80 pt-2">
                 <span className="text-slate-500 font-sans">Projected Expiry:</span>
