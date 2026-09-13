@@ -338,6 +338,7 @@ export default function AdminSuperDashboard() {
               <thead>
                 <tr className="bg-[#070b18] text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-800">
                   <th className="p-3.5">Store Details (Click for 360°)</th>
+                  <th className="p-3.5">Plan & Validity</th>
                   <th className="p-3.5">360° Inspector Link</th>
                   <th className="p-3.5">Spooler Telemetry</th>
                   <th className="p-3.5">Credentials</th>
@@ -351,8 +352,18 @@ export default function AdminSuperDashboard() {
                     s.last_seen &&
                     (Date.now() - new Date(s.last_seen).getTime()) / 1000 < 25
                   );
+
+                  // Subscription validity calculations
+                  const subEnd = s.subscription_end ? new Date(s.subscription_end) : new Date();
+                  const isExpired = subEnd.getTime() < Date.now();
+                  const daysLeft = isExpired
+                    ? 0
+                    : Math.ceil((subEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                  const planType = (s.plan_type || 'trial').toUpperCase();
+
                   return (
                     <tr key={s.id} className="hover:bg-slate-800/20 transition-colors">
+                      {/* Clicking Name opens 360° Inspector */}
                       <td className="p-3.5">
                         <button
                           onClick={() => router.push(`/admin/shops/${s.slug}`)}
@@ -364,6 +375,33 @@ export default function AdminSuperDashboard() {
                         <div className="text-slate-400 text-[11px] mt-0.5">Owner: {s.owner_name || 'N/A'}</div>
                       </td>
 
+                      {/* Subscription & Days Left Column */}
+                      <td className="p-3.5">
+                        <div className="space-y-1">
+                          <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold font-mono border ${
+                            planType === 'PREMIUM'
+                              ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                              : planType === 'STANDARD'
+                              ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30'
+                              : 'bg-slate-800 text-slate-300 border-slate-700'
+                          }`}>
+                            {planType}
+                          </span>
+                          <div>
+                            {isExpired ? (
+                              <span className="text-[10px] font-mono font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded inline-block animate-pulse">
+                                EXPIRED
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded inline-block">
+                                {daysLeft} DAYS LEFT
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Main link points directly to 360° Inspector */}
                       <td className="p-3.5 font-mono text-[11px]">
                         <button
                           onClick={() => router.push(`/admin/shops/${s.slug}`)}

@@ -20,6 +20,13 @@ export default function ShopInspector360AdminPage() {
   const [copiedKey, setCopiedKey] = useState(false);
   const [baseUrl, setBaseUrl] = useState('https://scantoprint.in');
 
+  // Subscription State Management
+  const [selectedPlan, setSelectedPlan] = useState<'trial' | 'standard' | 'premium'>('trial');
+  const [addedDaysBuffer, setAddedDaysBuffer] = useState<number>(0);
+  const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
+  const [isSavingSub, setIsSavingSub] = useState<boolean>(false);
+  const [subStatusMessage, setSubStatusMessage] = useState<string>('');
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       setBaseUrl(window.location.origin);
@@ -39,6 +46,7 @@ export default function ShopInspector360AdminPage() {
 
       if (shopData) {
         setShop(shopData);
+        setSelectedPlan(shopData.plan_type || 'trial');
         const { data: ordersData } = await supabase
           .from('orders')
           .select('*')
@@ -59,7 +67,10 @@ export default function ShopInspector360AdminPage() {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'shops' },
         (payload: any) => {
-          if (payload.new && payload.new.slug === slug) setShop(payload.new);
+          if (payload.new && payload.new.slug === slug) {
+            setShop(payload.new);
+            setSelectedPlan(payload.new.plan_type || 'trial');
+          }
         }
       )
       .subscribe();
@@ -103,6 +114,58 @@ export default function ShopInspector360AdminPage() {
       sessionStorage.setItem('current_shop', JSON.stringify(shop));
       localStorage.setItem('stp_shop_session', JSON.stringify(shop));
       window.open(`/dashboard/${shop.slug}`, '_blank');
+    }
+  };
+
+  // Subscription calculation helpers
+  const currentSubEnd = shop?.subscription_end ? new Date(shop.subscription_end) : new Date();
+  const isCurrentlyExpired = currentSubEnd.getTime() < Date.now();
+  
+  const daysRemaining = isCurrentlyExpired
+    ? 0
+    : Math.ceil((currentSubEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+
+  // Calculate project new end date based on buffer
+  const calculateNewEndDate = () => {
+    const baseDate = isCurrentlyExpired ? new Date() : new Date(currentSubEnd);
+    baseDate.setDate(baseDate.getDate() + addedDaysBuffer);
+    return baseDate;
+  };
+
+  // Execute Subscription Update
+  const handleConfirmSubscriptionUpdate = async () => {
+    if (!shop) return;
+    setIsSavingSub(true);
+    try {
+      const newEnd = calculateNewEndDate();
+      const pageLimit = selectedPlan === 'premium' ? 999999 : selectedPlan === 'standard' ? 500 : 500;
+
+      const { error } = await supabase
+        .from('shops')
+        .update({
+          plan_type: selectedPlan,
+          subscription_end: newEnd.toISOString(),
+          page_limit: pageLimit,
+        })
+        .eq('id', shop.id);
+
+      if (error) throw error;
+
+      setShop((prev: any) => ({
+        ...prev,
+        plan_type: selectedPlan,
+        subscription_end: newEnd.toISOString(),
+        page_limit: pageLimit,
+      }));
+
+      setAddedDaysBuffer(0);
+      setShowConfirmModal(false);
+      setSubStatusMessage('✓ Subscription updated successfully!');
+      setTimeout(() => setSubStatusMessage(''), 4000);
+    } catch (err: any) {
+      alert('Subscription update failed: ' + err.message);
+    } finally {
+      setIsSavingSub(false);
     }
   };
 
@@ -265,6 +328,130 @@ export default function ShopInspector360AdminPage() {
           </div>
         </div>
 
+        {/* ========================================================================= */}
+        {/* SUBSCRIPTION & PLAN MANAGEMENT CARD                                     */}
+        {/* ========================================================================= */}
+        <div className="admin-no-print bg-[#0b1021] border border-indigo-500/30 rounded-3xl p-6 shadow-2xl space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+            <div className="flex items-center gap-2.5">
+              <span className="text-xl">💳</span>
+              <div>
+                <h2 className="text-sm font-bold text-white uppercase tracking-wider">
+                  Subscription & Tier Management
+                </h2>
+                <p className="text-[11px] text-slate-400">
+                  Control merchant plan validity, page limits, and grant extension periods instantly.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-400">Current Plan:</span>
+              <span className="text-xs font-mono font-bold uppercase px-3 py-1 rounded-full bg-indigo-500/15 text-indigo-400 border border-indigo-500/30">
+                {shop.plan_type || 'TRIAL'}
+              </span>
+              {isCurrentlyExpired ? (
+                <span className="text-xs font-mono font-bold uppercase px-3 py-1 rounded-full bg-rose-500/15 text-rose-400 border border-rose-500/30 animate-pulse">
+                  EXPIRED
+                </span>
+              ) : (
+                <span className="text-xs font-mono font-bold uppercase px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                  {daysRemaining} DAYS LEFT
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+            {/* Plan Tier Selector */}
+            <div className="space-y-1.5 bg-[#070b18] p-4 rounded-2xl border border-slate-800">
+              <label className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                Select Subscription Tier
+              </label>
+              <select
+                value={selectedPlan}
+                onChange={(e) => setSelectedPlan(e.target.value as any)}
+                className="w-full bg-[#0b1021] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 font-medium"
+              >
+                <option value="trial">7-Day Free Trial (All Access)</option>
+                <option value="standard">Standard Plan (₹149/mo - 500 Pgs)</option>
+                <option value="premium">Premium Plan (₹249/mo - Unlimited)</option>
+              </select>
+              <p className="text-[10px] text-slate-500 pt-1">
+                {selectedPlan === 'trial' && '7 days trial quota with 500 pages.'}
+                {selectedPlan === 'standard' && '500 pages per cycle. Extra top-up enabled.'}
+                {selectedPlan === 'premium' && 'No page limits or restrictions.'}
+              </p>
+            </div>
+
+            {/* +28 Days Buffer Buttons */}
+            <div className="space-y-1.5 bg-[#070b18] p-4 rounded-2xl border border-slate-800 flex flex-col justify-between">
+              <div>
+                <label className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                  Extend Validity Buffer
+                </label>
+                <div className="flex items-center gap-2 mt-1">
+                  <button
+                    type="button"
+                    onClick={() => setAddedDaysBuffer((prev) => prev + 28)}
+                    className="flex-1 py-2 px-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow transition-all cursor-pointer flex items-center justify-center gap-1"
+                  >
+                    <span>+ 28 Days</span>
+                  </button>
+                  {addedDaysBuffer > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setAddedDaysBuffer(0)}
+                      className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl border border-slate-700 transition-all cursor-pointer"
+                      title="Reset buffer"
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="text-[11px] font-mono text-indigo-300 pt-1">
+                {addedDaysBuffer > 0 ? (
+                  <span>Adding: <strong className="text-emerald-400">+{addedDaysBuffer} Days</strong> ({addedDaysBuffer / 28} cycles)</span>
+                ) : (
+                  <span className="text-slate-500">Click &apos;+ 28 Days&apos; to extend.</span>
+                )}
+              </div>
+            </div>
+
+            {/* Expiry Details & Action */}
+            <div className="space-y-1.5 bg-[#070b18] p-4 rounded-2xl border border-slate-800 flex flex-col justify-between">
+              <div>
+                <label className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                  Expiry Timeline
+                </label>
+                <div className="text-xs font-mono text-slate-200 mt-1">
+                  Current Expiry: <strong className="text-white">{currentSubEnd.toLocaleDateString()}</strong>
+                </div>
+                {addedDaysBuffer > 0 && (
+                  <div className="text-xs font-mono text-emerald-400 mt-0.5">
+                    New Expiry: <strong>{calculateNewEndDate().toLocaleDateString()}</strong>
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowConfirmModal(true)}
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition-all shadow-md cursor-pointer mt-2"
+              >
+                Save Subscription Updates
+              </button>
+            </div>
+          </div>
+
+          {subStatusMessage && (
+            <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
+              {subStatusMessage}
+            </div>
+          )}
+        </div>
+
         {/* 360 DETAILS & COUNTER QR GRID */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           
@@ -400,7 +587,6 @@ export default function ShopInspector360AdminPage() {
                   <span className="text-sm font-black tracking-tight text-white block">
                     scantoprint.in
                   </span>
-                  {/* YAHAN AB EXACT WORKING LINK AAYEGA */}
                   <span className="text-[10px] font-mono text-blue-200 block">
                     {displayPrintLink}
                   </span>
@@ -500,6 +686,61 @@ export default function ShopInspector360AdminPage() {
         </div>
 
       </div>
+
+      {/* ========================================================================= */}
+      {/* CONFIRMATION MODAL POPUP DIALOG                                          */}
+      {/* ========================================================================= */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#0b1021] border border-slate-700 rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="space-y-1">
+              <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest bg-indigo-500/10 px-2.5 py-0.5 rounded-full border border-indigo-500/20">
+                Confirm Subscription Change
+              </span>
+              <h3 className="text-lg font-bold text-white pt-1">
+                Update Subscription for {shopTitle}?
+              </h3>
+              <p className="text-xs text-slate-400">
+                Review the changes before applying them to the live counter.
+              </p>
+            </div>
+
+            <div className="bg-[#070b18] p-4 rounded-2xl border border-slate-800 text-xs space-y-2 font-mono">
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-sans">New Tier:</span>
+                <span className="font-bold text-indigo-300 uppercase">{selectedPlan}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-sans">Buffer Added:</span>
+                <span className="font-bold text-emerald-400">+{addedDaysBuffer} Days</span>
+              </div>
+              <div className="flex justify-between border-t border-slate-800/80 pt-2">
+                <span className="text-slate-500 font-sans">Projected Expiry:</span>
+                <span className="font-bold text-white">{calculateNewEndDate().toLocaleDateString()}</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                disabled={isSavingSub}
+                onClick={() => setShowConfirmModal(false)}
+                className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl border border-slate-700 transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSavingSub}
+                onClick={handleConfirmSubscriptionUpdate}
+                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-800 text-white text-xs font-bold rounded-xl transition-all shadow-lg shadow-indigo-600/30 cursor-pointer"
+              >
+                {isSavingSub ? 'Updating...' : 'Yes, Confirm & Update'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

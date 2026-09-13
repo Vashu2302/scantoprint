@@ -1,10 +1,13 @@
 'use client';
 
+import React, { useState } from 'react';
 import Link from 'next/link';
 
 export default function HomePage() {
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
+
   return (
-    <div className="min-h-screen bg-[#070b14] text-slate-100 selection:bg-indigo-500 selection:text-white">
+    <div className="min-h-screen bg-[#070b14] text-slate-100 selection:bg-indigo-500 selection:text-white scroll-smooth">
       {/* Top Navbar */}
       <header className="sticky top-0 z-50 backdrop-blur-xl bg-[#070b14]/80 border-b border-slate-800/80 px-6 sm:px-12 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -16,9 +19,11 @@ export default function HomePage() {
           </span>
         </div>
 
-        <nav className="hidden md:flex items-center gap-8 text-xs font-medium text-slate-400">
+        {/* Sequence: How It Works -> Features -> Plans -> Testimonials -> Help & Support */}
+        <nav className="hidden md:flex items-center gap-7 text-xs font-medium text-slate-400">
           <a href="#workflow" className="hover:text-white transition-colors">How It Works</a>
           <a href="#features" className="hover:text-white transition-colors">Features</a>
+          <a href="#plans" className="hover:text-white transition-colors font-semibold text-indigo-400">Plans</a>
           <a href="#testimonials" className="hover:text-white transition-colors">Testimonials</a>
           <a href="#faq" className="hover:text-white transition-colors">Help & Support</a>
         </nav>
@@ -159,7 +164,197 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 3. Customer Reviews & Testimonials */}
+      {/* ========================================================================= */}
+      {/* 3. TRANSPARENT PRICING & SUBSCRIPTION PLANS                             */}
+      {/* ========================================================================= */}
+      <section id="plans" className="max-w-6xl mx-auto px-6 py-20 space-y-10">
+        <div className="text-center space-y-3">
+          <span className="text-[11px] font-bold text-indigo-400 uppercase tracking-widest bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/20">
+            Transparent Pricing
+          </span>
+          <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+            Simple Plans for Every Print Shop
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-400 max-w-xl mx-auto">
+            Choose the plan that fits your counter volume. Start risk-free with our 7-day full access trial.
+          </p>
+
+          {/* Monthly / Yearly Billing Toggle */}
+          <div className="pt-4 flex items-center justify-center gap-3">
+            <span className={`text-xs font-semibold ${billingCycle === 'monthly' ? 'text-white' : 'text-slate-400'}`}>
+              Monthly
+            </span>
+            <button
+              onClick={() => setBillingCycle(prev => prev === 'monthly' ? 'yearly' : 'monthly')}
+              className="w-12 h-6 rounded-full bg-slate-800 p-1 border border-slate-700 flex items-center transition-all cursor-pointer"
+            >
+              <div
+                className={`w-4 h-4 rounded-full bg-indigo-500 shadow-md transform transition-transform ${
+                  billingCycle === 'yearly' ? 'translate-x-6' : 'translate-x-0'
+                }`}
+              />
+            </button>
+            <span className={`text-xs font-semibold flex items-center gap-1.5 ${billingCycle === 'yearly' ? 'text-white' : 'text-slate-400'}`}>
+              <span>Yearly</span>
+              <span className="text-[9px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                SAVE BIG
+              </span>
+            </span>
+          </div>
+        </div>
+
+        {/* Pricing Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
+          {/* Card 1: 7-Day Free Trial */}
+          <div className="bg-[#0b1021] border border-slate-800 rounded-3xl p-7 flex flex-col justify-between hover:border-slate-700 transition-all shadow-xl">
+            <div className="space-y-4">
+              <div className="inline-block text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-800">
+                Risk-Free Test
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-white">7-Day Free Trial</h3>
+                <p className="text-xs text-slate-400 mt-1">Full access to experience automated counter printing.</p>
+              </div>
+              <div className="pt-2">
+                <span className="text-3xl font-black text-white">₹0</span>
+                <span className="text-xs text-slate-400"> / 7 days</span>
+              </div>
+
+              <ul className="space-y-2.5 pt-4 text-xs text-slate-300 border-t border-slate-800/80">
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-400">✓</span>
+                  <span><strong>Unlimited</strong> print access for 7 days</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-400">✓</span>
+                  <span>Windows Desktop Spooler included</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-400">✓</span>
+                  <span>Live Store Standee & QR Generator</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-400">✓</span>
+                  <span>Direct UPI routing to your account</span>
+                </li>
+              </ul>
+            </div>
+
+            <div className="pt-6">
+              <Link
+                href="/register"
+                className="w-full py-3 block text-center rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition-all border border-slate-700"
+              >
+                Start 7-Day Free Trial
+              </Link>
+            </div>
+          </div>
+
+          {/* Card 2: Standard Plan */}
+          <div className="bg-[#0e1626] border border-indigo-500/40 rounded-3xl p-7 flex flex-col justify-between hover:border-indigo-500 transition-all shadow-2xl relative">
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-600 text-white text-[10px] uppercase font-bold tracking-widest px-3 py-0.5 rounded-full shadow-md">
+              Most Popular
+            </div>
+
+            <div className="space-y-4">
+              <div className="inline-block text-[10px] font-bold text-indigo-400 uppercase tracking-wider bg-indigo-950/60 px-2.5 py-1 rounded-lg border border-indigo-800/50">
+                Small & Medium Shops
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-white">Standard Plan</h3>
+                <p className="text-xs text-slate-400 mt-1">Perfect for steady daily photocopy & document counters.</p>
+              </div>
+              <div className="pt-2">
+                <span className="text-3xl font-black text-indigo-400">
+                  {billingCycle === 'monthly' ? '₹149' : '₹1,499'}
+                </span>
+                <span className="text-xs text-slate-400">
+                  {billingCycle === 'monthly' ? ' / 28 days' : ' / year'}
+                </span>
+              </div>
+
+              <ul className="space-y-2.5 pt-4 text-xs text-slate-300 border-t border-slate-800/80">
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-400">✓</span>
+                  <span><strong>500 Pages</strong> per month quota</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-400">✓</span>
+                  <span>Instant Top-Up (₹149 for extra 500 pgs)</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-400">✓</span>
+                  <span>Full Hardware Duplex & Shredder engine</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-400">✓</span>
+                  <span>Real-time Order & Sales telemetry</span>
+                </li>
+              </ul>
+            </div>
+
+            <div className="pt-6">
+              <Link
+                href="/register"
+                className="w-full py-3 block text-center rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-all shadow-lg shadow-indigo-600/30"
+              >
+                Choose Standard
+              </Link>
+            </div>
+          </div>
+
+          {/* Card 3: Premium Plan */}
+          <div className="bg-[#0b1021] border border-slate-800 rounded-3xl p-7 flex flex-col justify-between hover:border-slate-700 transition-all shadow-xl">
+            <div className="space-y-4">
+              <div className="inline-block text-[10px] font-bold text-amber-400 uppercase tracking-wider bg-amber-950/40 px-2.5 py-1 rounded-lg border border-amber-800/40">
+                Heavy Volume Counters
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-white">Premium Plan</h3>
+                <p className="text-xs text-slate-400 mt-1">Unlimited printing capacity for busy universities & cafes.</p>
+              </div>
+              <div className="pt-2">
+                <span className="text-3xl font-black text-white">
+                  {billingCycle === 'monthly' ? '₹249' : '₹2,199'}
+                </span>
+                <span className="text-xs text-slate-400">
+                  {billingCycle === 'monthly' ? ' / 28 days' : ' / year'}
+                </span>
+              </div>
+
+              <ul className="space-y-2.5 pt-4 text-xs text-slate-300 border-t border-slate-800/80">
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-400">✓</span>
+                  <span><strong className="text-amber-300">Unlimited Pages</strong> printing</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-400">✓</span>
+                  <span>Zero quota restrictions or page caps</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-400">✓</span>
+                  <span>Priority spooling & queue processing</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-400">✓</span>
+                  <span>Direct WhatsApp Priority Support</span>
+                </li>
+              </ul>
+            </div>
+
+            <div className="pt-6">
+              <Link
+                href="/register"
+                className="w-full py-3 block text-center rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition-all border border-slate-700"
+              >
+                Choose Premium
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 4. Customer Reviews & Testimonials */}
       <section id="testimonials" className="max-w-6xl mx-auto px-6 py-16 space-y-8">
         <div className="text-center space-y-2">
           <h2 className="text-2xl sm:text-3xl font-black text-white">Customer Reviews & Testimonials</h2>
@@ -203,7 +398,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 4. Help & Support / FAQ */}
+      {/* 5. Help & Support / FAQ */}
       <section id="faq" className="max-w-4xl mx-auto px-6 py-16 space-y-6">
         <div className="text-center space-y-2 mb-8">
           <h2 className="text-2xl sm:text-3xl font-black text-white">Help & Support Details</h2>

@@ -146,10 +146,20 @@ export default function VashuExactMerchantDashboard() {
     window.print();
   };
 
-  // Direct .zip download via Google Drive Direct Link
-  const handleDownloadSoftware = () => {
-    const driveDirectUrl = 'https://drive.google.com/uc?export=download&id=18JXGyDe3bhBaJKgnAlqSey-4kGmrtc_j';
-    window.open(driveDirectUrl, '_blank');
+  // Direct .zip download via dynamic link from Supabase app_settings
+  const handleDownloadSoftware = async () => {
+    try {
+      const { data } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'agent_download_url')
+        .single();
+
+      const targetUrl = data?.value || 'https://drive.google.com/uc?export=download&id=18JXGyDe3bhBaJKgnAlqSey-4kGmrtc_j';
+      window.open(targetUrl, '_blank');
+    } catch {
+      window.open('https://drive.google.com/uc?export=download&id=18JXGyDe3bhBaJKgnAlqSey-4kGmrtc_j', '_blank');
+    }
   };
 
   if (loading) {
@@ -181,6 +191,14 @@ export default function VashuExactMerchantDashboard() {
   );
 
   const isActive = isOnline && shop.agent_status === 'active';
+
+  // Subscription calculation
+  const subEnd = shop?.subscription_end ? new Date(shop.subscription_end) : new Date();
+  const isExpired = subEnd.getTime() < Date.now();
+  const daysRemaining = isExpired
+    ? 0
+    : Math.ceil((subEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  const planType = (shop?.plan_type || 'trial').toUpperCase();
 
   const shopTitle = shop.business_name || shop.name || 'Store';
   const shopInitial = shopTitle.trim().charAt(0).toUpperCase() || 'S';
@@ -246,14 +264,39 @@ export default function VashuExactMerchantDashboard() {
             {shopInitial}
           </div>
           <div>
-            <h1 className="font-bold text-base text-white leading-tight">{shopTitle}</h1>
-            <p className="text-[11px] text-slate-400">
+            <div className="flex items-center gap-2">
+              <h1 className="font-bold text-base text-white leading-tight">{shopTitle}</h1>
+              {/* Plan Badge in Header */}
+              <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono border ${
+                planType === 'PREMIUM'
+                  ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                  : planType === 'STANDARD'
+                  ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30'
+                  : 'bg-slate-800 text-slate-300 border-slate-700'
+              }`}>
+                {planType}
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-0.5">
               Counter Link: <a href={uploadPageUrl} target="_blank" rel="noreferrer" className="text-indigo-400 hover:text-indigo-300 font-mono underline">{displayPrintLink}</a>
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Subscription Validity Pill */}
+          {isExpired ? (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30 shadow-sm animate-pulse">
+              <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+              PLAN EXPIRED
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-500/10 text-indigo-300 border border-indigo-500/25 shadow-sm font-mono">
+              <span className="w-2 h-2 rounded-full bg-indigo-400"></span>
+              {daysRemaining} DAYS LEFT
+            </span>
+          )}
+
           <button
             onClick={handleDownloadSoftware}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-500/40 shadow-sm transition-all cursor-pointer"
@@ -265,24 +308,12 @@ export default function VashuExactMerchantDashboard() {
           {isOnline ? (
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-sm">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              SYSTEM CONNECTED
+              CONNECTED
             </span>
           ) : (
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20 shadow-sm">
               <span className="w-2 h-2 rounded-full bg-rose-500"></span>
-              SYSTEM NOT CONNECTED
-            </span>
-          )}
-
-          {isActive ? (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-sm mr-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              ACTIVE
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20 shadow-sm mr-1">
-              <span className="w-2 h-2 rounded-full bg-rose-500"></span>
-              INACTIVE
+              OFFLINE
             </span>
           )}
 
@@ -325,7 +356,19 @@ export default function VashuExactMerchantDashboard() {
         </div>
       </header>
 
+      {/* Subscription Expired Alert Banner */}
+      {isExpired && (
+        <div className="bg-rose-950/60 border-b border-rose-500/30 px-6 py-2.5 text-center text-xs text-rose-300 flex items-center justify-center gap-2 no-print">
+          <span>⚠️</span>
+          <span>
+            <strong>Your counter subscription has expired.</strong> Please contact platform support or admin to renew and keep automated printing active.
+          </span>
+        </div>
+      )}
+
       <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 space-y-5">
+        
+        {/* Metric Cards Row */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 no-print">
           <div className="bg-[#0b1021] border border-slate-800/90 rounded-xl p-4">
             <span className="text-[11px] text-slate-400 uppercase tracking-wider block font-medium">Today&apos;s Revenue</span>
@@ -350,6 +393,46 @@ export default function VashuExactMerchantDashboard() {
           </div>
         </div>
 
+        {/* ========================================================================= */}
+        {/* ACTIVE SUBSCRIPTION & DAYS LEFT METRIC CARD                             */}
+        {/* ========================================================================= */}
+        <div className="bg-gradient-to-r from-[#0b1021] to-[#0e1626] border border-indigo-500/30 rounded-2xl p-5 shadow-xl flex flex-wrap items-center justify-between gap-4 no-print">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-xl text-indigo-400">
+              💳
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-white uppercase tracking-wider">
+                  Active Subscription:
+                </span>
+                <span className="text-xs font-mono font-black text-indigo-400 uppercase">
+                  {planType} TIER
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Valid until: <strong className="text-slate-200">{subEnd.toLocaleDateString()}</strong> • {planType === 'PREMIUM' ? 'Unlimited Pages Quota' : `${shop.page_limit || 500} Pages per Month`}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {isExpired ? (
+              <span className="px-4 py-2 bg-rose-500/15 border border-rose-500/30 text-rose-400 font-mono font-bold text-xs rounded-xl animate-pulse">
+                Expired (0 Days Left)
+              </span>
+            ) : (
+              <div className="text-right">
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-medium">Time Left</span>
+                <span className="text-base font-black font-mono text-emerald-400">
+                  {daysRemaining} Days Remaining
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Spooler Agent Key Box */}
         <div className="bg-[#0b1021] border border-slate-800/90 rounded-xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs no-print">
           <div className="flex items-center gap-2">
             <span className="text-amber-400 font-bold">⚡ Desktop Spooler Agent Key:</span>
