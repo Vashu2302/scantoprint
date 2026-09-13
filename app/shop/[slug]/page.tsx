@@ -50,6 +50,9 @@ export default function ExactCustomerPrintStudio() {
   const [placedOrder, setPlacedOrder] = useState<any>(null);
   const [printStatus, setPrintStatus] = useState<string>('queued');
 
+  // Popup Dismiss State (Allows customer to dismiss the popup and prepare settings)
+  const [isPopupDismissed, setIsPopupDismissed] = useState<boolean>(false);
+
   // Total uploaded files count
   const totalPages = files.length;
 
@@ -411,6 +414,11 @@ export default function ExactCustomerPrintStudio() {
   };
 
   const handleConfirmAndPay = async () => {
+    if (!isShopOnline) {
+      alert('Shop printer counter is offline. Please wait until connection is restored.');
+      return;
+    }
+
     if (files.length === 0) {
       alert('Please upload at least one document or image.');
       return;
@@ -512,15 +520,18 @@ export default function ExactCustomerPrintStudio() {
   const isCompleted = printStatus === 'completed' || printStatus === 'printed';
   const isPrinting = printStatus === 'printing' || printStatus === 'processing';
 
+  // Show blur only when offline AND popup hasn't been dismissed yet
+  const shouldBlur = !isShopOnline && !isPopupDismissed;
+
   return (
     <div className="relative min-h-screen bg-[#060813] text-slate-200 font-sans selection:bg-indigo-600 selection:text-white pb-16">
       
       {/* ========================================================================= */}
-      {/* PERSISTENT OFFLINE POPUP OVERLAY (Non-dismissible & Blurs Background)     */}
+      {/* OFFLINE POPUP MODAL (Dismissible with OK Button to Allow Page Access)     */}
       {/* ========================================================================= */}
-      {!isShopOnline && (
+      {!isShopOnline && !isPopupDismissed && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-md p-4 animate-in fade-in duration-300">
-          <div className="bg-[#0b1021] border border-rose-500/40 max-w-md w-full p-8 rounded-3xl shadow-2xl text-center space-y-4">
+          <div className="bg-[#0b1021] border border-rose-500/40 max-w-md w-full p-7 sm:p-8 rounded-3xl shadow-2xl text-center space-y-4">
             <div className="w-16 h-16 mx-auto rounded-3xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-3xl shadow-lg shadow-rose-500/10">
               🖨️
             </div>
@@ -537,26 +548,30 @@ export default function ExactCustomerPrintStudio() {
               </p>
             </div>
 
-            <div className="bg-[#070b18] border border-slate-800/90 rounded-2xl p-4 text-left space-y-2">
+            <div className="bg-[#070b18] border border-slate-800/90 rounded-2xl p-4 text-left space-y-1.5">
               <div className="flex items-center gap-2 text-xs text-amber-400 font-medium">
-                <span>⚠️</span>
-                <span>Printer Spooler Not Ready</span>
+                <span>ℹ️</span>
+                <span>You can still upload and setup files</span>
               </div>
-              <p className="text-[11px] text-slate-400 leading-normal">
-                Please wait or notify the shop counter staff to start the desktop spooler software. This page will automatically unlock once connected.
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Feel free to upload your documents, adjust rotation, copies and layout now. The payment button will unlock as soon as the printer comes online.
               </p>
             </div>
 
-            <div className="flex items-center justify-center gap-2 text-xs text-slate-400 font-mono pt-1">
-              <div className="w-2 h-2 rounded-full bg-amber-400 animate-ping"></div>
-              <span>Listening for live connection...</span>
-            </div>
+            {/* OK / Understood Button */}
+            <button
+              type="button"
+              onClick={() => setIsPopupDismissed(true)}
+              className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-indigo-600/30 cursor-pointer"
+            >
+              OK, Got It (Prepare Document)
+            </button>
           </div>
         </div>
       )}
 
-      {/* Main Page Layout (Blurs when offline) */}
-      <div className={!isShopOnline ? 'pointer-events-none select-none filter blur-[3px] transition-all duration-300' : ''}>
+      {/* Main Page Layout (Blurs only when initial popup is visible) */}
+      <div className={shouldBlur ? 'pointer-events-none select-none filter blur-[3px] transition-all duration-300' : ''}>
         
         {/* Top Header */}
         <header className="border-b border-slate-800/80 bg-[#090d1c]/90 px-4 sm:px-6 py-3 flex items-center justify-between">
@@ -572,8 +587,18 @@ export default function ExactCustomerPrintStudio() {
               </p>
             </div>
           </div>
-          <div className="text-[11px] text-slate-400 font-mono bg-slate-900 px-3 py-1 rounded-full border border-slate-800">
-            Encrypted Spool
+
+          <div className="flex items-center gap-2">
+            {!isShopOnline ? (
+              <span className="text-[11px] font-mono text-rose-400 bg-rose-500/10 px-3 py-1 rounded-full border border-rose-500/20 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping"></span>
+                Shop Offline
+              </span>
+            ) : (
+              <div className="text-[11px] text-slate-400 font-mono bg-slate-900 px-3 py-1 rounded-full border border-slate-800">
+                Encrypted Spool
+              </div>
+            )}
           </div>
         </header>
 
@@ -974,14 +999,28 @@ export default function ExactCustomerPrintStudio() {
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  disabled={paying || files.length === 0}
-                  onClick={handleConfirmAndPay}
-                  className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-bold text-xs tracking-wider rounded-xl transition-all shadow-lg cursor-pointer"
-                >
-                  {paying ? 'Rendering & Spooling to Printer...' : 'Confirm and Pay'}
-                </button>
+                {/* ========================================================================= */}
+                {/* DYNAMIC CONFIRM & PAY BUTTON (Locks & Shows Offline State when PC is down)*/}
+                {/* ========================================================================= */}
+                {!isShopOnline ? (
+                  <button
+                    type="button"
+                    disabled={true}
+                    className="w-full py-3.5 bg-rose-500/20 text-rose-300 border border-rose-500/30 font-bold text-xs tracking-wider rounded-xl cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-rose-400 animate-ping"></span>
+                    <span>Shop is Offline • Waiting for Counter PC...</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={paying || files.length === 0}
+                    onClick={handleConfirmAndPay}
+                    className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-bold text-xs tracking-wider rounded-xl transition-all shadow-lg cursor-pointer"
+                  >
+                    {paying ? 'Rendering & Spooling to Printer...' : 'Confirm and Pay'}
+                  </button>
+                )}
               </div>
             </div>
           )}
