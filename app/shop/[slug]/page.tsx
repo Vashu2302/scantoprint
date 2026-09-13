@@ -60,6 +60,7 @@ export default function ExactCustomerPrintStudio() {
     }
   }, [totalPages, sideMode]);
 
+  // Load Shop & Subscribe to Live Heartbeat (Online/Offline Telemetry)
   useEffect(() => {
     async function loadShop() {
       if (!slug) return;
@@ -75,9 +76,44 @@ export default function ExactCustomerPrintStudio() {
       setLoading(false);
     }
     loadShop();
+
+    // Listen to real-time status updates of the shop PC
+    const channel = supabase
+      .channel(`shop_online_telemetry_${slug}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'shops',
+          filter: `slug=eq.${slug}`,
+        },
+        (payload: any) => {
+          if (payload.new) {
+            setShop(payload.new);
+          }
+        }
+      )
+      .subscribe();
+
+    // Re-verify heartbeat status every 5 seconds
+    const interval = setInterval(async () => {
+      if (!slug) return;
+      const { data } = await supabase
+        .from('shops')
+        .select('*')
+        .eq('slug', slug)
+        .single();
+      if (data) setShop(data);
+    }, 5000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(interval);
+    };
   }, [slug]);
 
-  // Realtime Status Tracking
+  // Realtime Status Tracking for Placed Order
   useEffect(() => {
     if (!placedOrder?.id) return;
 
@@ -463,439 +499,494 @@ export default function ExactCustomerPrintStudio() {
     );
   }
 
+  // Live Check: Is shop PC active and heartbeat refreshed within last 25 seconds?
+  const isShopOnline = Boolean(
+    shop.is_online &&
+    shop.agent_status === 'active' &&
+    shop.last_seen &&
+    (Date.now() - new Date(shop.last_seen).getTime()) / 1000 < 25
+  );
+
   const shopTitle = shop.business_name || shop.name || 'Store';
   const shopInitial = shopTitle.trim().charAt(0).toUpperCase() || 'S';
   const isCompleted = printStatus === 'completed' || printStatus === 'printed';
   const isPrinting = printStatus === 'printing' || printStatus === 'processing';
 
   return (
-    <div className="min-h-screen bg-[#060813] text-slate-200 font-sans selection:bg-indigo-600 selection:text-white pb-16">
-      <header className="border-b border-slate-800/80 bg-[#090d1c]/90 px-4 sm:px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-xs shadow-md shadow-indigo-600/30">
-            {shopInitial}
-          </div>
-          <div>
-            <h1 className="font-bold text-sm text-white leading-tight">{shopTitle}</h1>
-            <p className="text-[10px] text-emerald-400 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
-              Secure Privacy Print Engine
-            </p>
-          </div>
-        </div>
-        <div className="text-[11px] text-slate-400 font-mono bg-slate-900 px-3 py-1 rounded-full border border-slate-800">
-          Encrypted Spool
-        </div>
-      </header>
-
-      <main className="max-w-3xl mx-auto px-4 pt-6">
-        {placedOrder ? (
-          <div className="bg-[#0b1021] border border-slate-800/90 rounded-3xl p-6 sm:p-10 shadow-2xl space-y-6 text-center animate-in fade-in zoom-in-95 duration-200">
-            <div className="w-16 h-16 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-3xl flex items-center justify-center mx-auto text-3xl shadow-lg shadow-emerald-500/10">
-              ✓
+    <div className="relative min-h-screen bg-[#060813] text-slate-200 font-sans selection:bg-indigo-600 selection:text-white pb-16">
+      
+      {/* ========================================================================= */}
+      {/* PERSISTENT OFFLINE POPUP OVERLAY (Non-dismissible & Blurs Background)     */}
+      {/* ========================================================================= */}
+      {!isShopOnline && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-md p-4 animate-in fade-in duration-300">
+          <div className="bg-[#0b1021] border border-rose-500/40 max-w-md w-full p-8 rounded-3xl shadow-2xl text-center space-y-4">
+            <div className="w-16 h-16 mx-auto rounded-3xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-3xl shadow-lg shadow-rose-500/10">
+              🖨️
             </div>
 
             <div className="space-y-1">
-              <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
-                Payment Confirmed
+              <span className="text-[10px] font-bold text-rose-400 uppercase tracking-widest bg-rose-500/10 px-3 py-1 rounded-full border border-rose-500/20">
+                Counter System Offline
               </span>
-              <h2 className="text-2xl font-black text-white tracking-tight pt-2">
-                Payment Successful!
+              <h2 className="text-2xl font-black text-white pt-2">
+                Shop is Offline
               </h2>
-              <p className="text-xs text-slate-400">
-                Your print job has been accepted and dispatched to {shopTitle}&apos;s printer.
+              <p className="text-xs text-slate-300 leading-relaxed pt-1">
+                The print counter computer at <b className="text-indigo-400">{shopTitle}</b> is currently disconnected from the server.
               </p>
             </div>
 
-            <div className="bg-[#070b18] border border-slate-800/90 rounded-2xl p-5 text-left text-xs font-mono space-y-2.5 max-w-md mx-auto">
-              <div className="flex justify-between items-center pb-2 border-b border-slate-800">
-                <span className="text-slate-500 font-sans">Order ID:</span>
-                <span className="font-bold text-indigo-400">
-                  #STP-{placedOrder.id.substring(0, 8).toUpperCase()}
-                </span>
+            <div className="bg-[#070b18] border border-slate-800/90 rounded-2xl p-4 text-left space-y-2">
+              <div className="flex items-center gap-2 text-xs text-amber-400 font-medium">
+                <span>⚠️</span>
+                <span>Printer Spooler Not Ready</span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500 font-sans">Amount Paid:</span>
-                <span className="font-bold text-emerald-400">₹{placedOrder.amount}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500 font-sans">Total Sheets:</span>
-                <span className="text-slate-300">{sheetsToPrint * copies} Sheets ({colorMode.toUpperCase()})</span>
-              </div>
+              <p className="text-[11px] text-slate-400 leading-normal">
+                Please wait or notify the shop counter staff to start the desktop spooler software. This page will automatically unlock once connected.
+              </p>
             </div>
 
-            <div className="bg-[#070b18] border border-slate-800/90 rounded-2xl p-5 max-w-md mx-auto space-y-3">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-400 font-medium">Printer Status:</span>
-                {isCompleted ? (
-                  <span className="font-mono text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-lg">
-                    ✅ DOCUMENT PRINTED!
-                  </span>
-                ) : isPrinting ? (
-                  <span className="font-mono text-xs font-bold text-blue-400 bg-blue-500/10 border border-blue-500/20 px-3 py-1 rounded-lg animate-pulse">
-                    🖨️ PRINTING IN PROGRESS...
-                  </span>
-                ) : (
-                  <span className="font-mono text-xs font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-lg">
-                    ⏳ IN QUEUE (WAITING)
-                  </span>
-                )}
-              </div>
-
-              {!isCompleted && (
-                <div className="text-[11px] text-slate-400 text-left bg-slate-900/60 p-3 rounded-xl border border-slate-800/60 space-y-1 font-sans">
-                  <div className="flex items-center gap-2 text-indigo-300 font-medium">
-                    <span>⏱️ Estimated Waiting Time:</span>
-                    <span className="font-bold font-mono">~1-2 Minutes</span>
-                  </div>
-                  <p className="text-[10px] text-slate-500">
-                    Your physical print is currently being fed through the roller.
-                  </p>
-                </div>
-              )}
-
-              {isCompleted && (
-                <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-center space-y-1.5">
-                  <p className="text-xs font-bold text-emerald-400 flex items-center justify-center gap-1.5">
-                    <span>✨</span>
-                    <span>Print Completed Successfully!</span>
-                  </p>
-                  <p className="text-[11px] text-slate-200 leading-relaxed font-sans">
-                    🔒 For your privacy, your file was shredded from memory and permanently wiped.
-                  </p>
-                </div>
-              )}
+            <div className="flex items-center justify-center gap-2 text-xs text-slate-400 font-mono pt-1">
+              <div className="w-2 h-2 rounded-full bg-amber-400 animate-ping"></div>
+              <span>Listening for live connection...</span>
             </div>
-
-            <button
-              onClick={() => {
-                setPlacedOrder(null);
-                setFiles([]);
-              }}
-              className="px-6 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-all cursor-pointer"
-            >
-              Print Another Document
-            </button>
           </div>
-        ) : (
-          <div className="space-y-6">
-            <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-5 shadow-2xl space-y-4">
-              <h2 className="text-center text-xs font-bold text-slate-300 uppercase tracking-wider">
-                Upload Document
-              </h2>
+        </div>
+      )}
 
-              <div
-                onClick={() => fileInputRef.current?.click()}
-                className="border border-dashed border-slate-700 hover:border-indigo-500/80 rounded-xl p-6 text-center cursor-pointer bg-[#070b18]/60 transition-all"
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept=".pdf,.png,.jpg,.jpeg,.webp"
-                  className="hidden"
-                  onChange={handleFilesSelect}
-                />
-                <div className="text-2xl mb-1">📄</div>
-                <div className="text-xs font-semibold text-white">Click to Upload Document / Image</div>
-                <p className="text-[10px] text-slate-500 mt-0.5">Supports PDF, PNG, JPG, JPEG, WEBP</p>
-              </div>
-
-              <div className="text-center">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="text-xs text-indigo-400 hover:text-indigo-300 font-medium py-1 px-3 rounded-lg hover:bg-indigo-500/10 transition-all inline-flex items-center gap-1 cursor-pointer"
-                >
-                  <span>+</span>
-                  <span>Add Another File</span>
-                </button>
-              </div>
-
-              {files.length > 0 && (
-                <div className="space-y-1.5 pt-1">
-                  {files.map((f) => (
-                    <div
-                      key={f.id}
-                      className="flex items-center justify-between bg-[#070b18] border border-slate-800/90 px-3 py-2 rounded-lg text-xs"
-                    >
-                      <div className="flex items-center gap-2 truncate max-w-[85%]">
-                        <span className="text-slate-400">📄</span>
-                        <span className="text-slate-200 truncate">{f.name}</span>
-                        <span className="text-[10px] text-slate-500">({f.pages} p...)</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeFile(f.id)}
-                        className="text-rose-400 hover:text-rose-300 text-xs px-1 cursor-pointer"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
+      {/* Main Page Layout (Blurs when offline) */}
+      <div className={!isShopOnline ? 'pointer-events-none select-none filter blur-[3px] transition-all duration-300' : ''}>
+        
+        {/* Top Header */}
+        <header className="border-b border-slate-800/80 bg-[#090d1c]/90 px-4 sm:px-6 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-xs shadow-md shadow-indigo-600/30">
+              {shopInitial}
             </div>
+            <div>
+              <h1 className="font-bold text-sm text-white leading-tight">{shopTitle}</h1>
+              <p className="text-[10px] text-emerald-400 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
+                Secure Privacy Print Engine
+              </p>
+            </div>
+          </div>
+          <div className="text-[11px] text-slate-400 font-mono bg-slate-900 px-3 py-1 rounded-full border border-slate-800">
+            Encrypted Spool
+          </div>
+        </header>
 
-            <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-5 shadow-2xl space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                  Live Print Preview
-                </h2>
-                <span className="text-[10px] font-mono text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded">
-                  Format: {paperSize} • {orientation}
-                </span>
+        {/* Main Form */}
+        <main className="max-w-3xl mx-auto px-4 pt-6">
+          {placedOrder ? (
+            <div className="bg-[#0b1021] border border-slate-800/90 rounded-3xl p-6 sm:p-10 shadow-2xl space-y-6 text-center animate-in fade-in zoom-in-95 duration-200">
+              <div className="w-16 h-16 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-3xl flex items-center justify-center mx-auto text-3xl shadow-lg shadow-emerald-500/10">
+                ✓
               </div>
 
-              <div className="flex flex-col items-center justify-center min-h-[380px] py-2">
-                {files.length === 0 ? (
-                  <div className="text-center space-y-2 text-slate-500">
-                    <div className="text-3xl">📄</div>
-                    <p className="text-xs">Upload a file to see live sheet preview</p>
-                  </div>
-                ) : (
-                  <div className="w-full flex flex-col items-center space-y-4">
-                    <div className="bg-slate-900/50 p-2 rounded-xl border border-slate-800 flex items-center justify-center max-w-full">
-                      <canvas
-                        ref={previewCanvasRef}
-                        className="bg-white rounded shadow-2xl transition-all duration-200 border border-slate-300 max-w-full max-h-[440px] h-auto object-contain"
-                      />
-                    </div>
+              <div className="space-y-1">
+                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
+                  Payment Confirmed
+                </span>
+                <h2 className="text-2xl font-black text-white tracking-tight pt-2">
+                  Payment Successful!
+                </h2>
+                <p className="text-xs text-slate-400">
+                  Your print job has been accepted and dispatched to {shopTitle}&apos;s printer.
+                </p>
+              </div>
 
-                    {totalPreviewSheets > 1 && (
-                      <div className="flex items-center gap-3 text-xs font-mono text-slate-400 pt-1">
-                        <button
-                          type="button"
-                          disabled={currentSheet <= 1}
-                          onClick={() => setCurrentSheet((prev) => Math.max(1, prev - 1))}
-                          className="px-2 py-1 bg-[#070b18] hover:bg-slate-800 disabled:opacity-30 rounded border border-slate-800 text-[11px] cursor-pointer"
-                        >
-                          ← Prev
-                        </button>
-                        <span>
-                          Sheet {currentSheet} of {totalPreviewSheets}
-                        </span>
-                        <button
-                          type="button"
-                          disabled={currentSheet >= totalPreviewSheets}
-                          onClick={() => setCurrentSheet((prev) => Math.min(totalPreviewSheets, prev + 1))}
-                          className="px-2 py-1 bg-[#070b18] hover:bg-slate-800 disabled:opacity-30 rounded border border-slate-800 text-[11px] cursor-pointer"
-                        >
-                          Next →
-                        </button>
-                      </div>
-                    )}
+              <div className="bg-[#070b18] border border-slate-800/90 rounded-2xl p-5 text-left text-xs font-mono space-y-2.5 max-w-md mx-auto">
+                <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+                  <span className="text-slate-500 font-sans">Order ID:</span>
+                  <span className="font-bold text-indigo-400">
+                    #STP-{placedOrder.id.substring(0, 8).toUpperCase()}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500 font-sans">Amount Paid:</span>
+                  <span className="font-bold text-emerald-400">₹{placedOrder.amount}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500 font-sans">Total Sheets:</span>
+                  <span className="text-slate-300">{sheetsToPrint * copies} Sheets ({colorMode.toUpperCase()})</span>
+                </div>
+              </div>
+
+              <div className="bg-[#070b18] border border-slate-800/90 rounded-2xl p-5 max-w-md mx-auto space-y-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-400 font-medium">Printer Status:</span>
+                  {isCompleted ? (
+                    <span className="font-mono text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-lg">
+                      ✅ DOCUMENT PRINTED!
+                    </span>
+                  ) : isPrinting ? (
+                    <span className="font-mono text-xs font-bold text-blue-400 bg-blue-500/10 border border-blue-500/20 px-3 py-1 rounded-lg animate-pulse">
+                      🖨️ PRINTING IN PROGRESS...
+                    </span>
+                  ) : (
+                    <span className="font-mono text-xs font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-lg">
+                      ⏳ IN QUEUE (WAITING)
+                    </span>
+                  )}
+                </div>
+
+                {!isCompleted && (
+                  <div className="text-[11px] text-slate-400 text-left bg-slate-900/60 p-3 rounded-xl border border-slate-800/60 space-y-1 font-sans">
+                    <div className="flex items-center gap-2 text-indigo-300 font-medium">
+                      <span>⏱️ Estimated Waiting Time:</span>
+                      <span className="font-bold font-mono">~1-2 Minutes</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500">
+                      Your physical print is currently being fed through the roller.
+                    </p>
                   </div>
                 )}
-              </div>
-            </div>
 
-            <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-5 shadow-2xl space-y-4">
-              <h2 className="text-center text-xs font-bold text-slate-300 uppercase tracking-wider">
-                Print Settings & Payment
-              </h2>
-
-              <div className="space-y-1 pt-1">
-                <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                  Color Mode
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setColorMode('bw')}
-                    className={`py-2 px-3 rounded-xl text-xs font-medium transition-all cursor-pointer ${
-                      colorMode === 'bw'
-                        ? 'bg-indigo-600 text-white shadow'
-                        : 'bg-[#070b18] text-slate-400 border border-slate-800 hover:border-slate-700'
-                    }`}
-                  >
-                    B & W (₹{bwSingleRate})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setColorMode('color')}
-                    className={`py-2 px-3 rounded-xl text-xs font-medium transition-all cursor-pointer ${
-                      colorMode === 'color'
-                        ? 'bg-indigo-600 text-white shadow'
-                        : 'bg-[#070b18] text-slate-400 border border-slate-800 hover:border-slate-700'
-                    }`}
-                  >
-                    Color (₹{colorSingleRate})
-                  </button>
-                </div>
-              </div>
-
-              {/* SIDES (Auto-Faded & Disabled when totalPages <= 1) */}
-              <div className="space-y-1">
-                <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                  Printing Side
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setSideMode('single')}
-                    className={`py-2 px-3 rounded-xl text-xs font-medium transition-all cursor-pointer ${
-                      sideMode === 'single'
-                        ? 'bg-indigo-600 text-white shadow'
-                        : 'bg-[#070b18] text-slate-400 border border-slate-800 hover:border-slate-700'
-                    }`}
-                  >
-                    Single-Sided
-                  </button>
-
-                  <button
-                    type="button"
-                    disabled={totalPages <= 1}
-                    onClick={() => setSideMode('double')}
-                    className={`py-2 px-3 rounded-xl text-xs font-medium transition-all ${
-                      totalPages <= 1
-                        ? 'opacity-30 cursor-not-allowed bg-[#070b18] text-slate-500 border border-slate-800/50'
-                        : sideMode === 'double'
-                        ? 'bg-indigo-600 text-white shadow cursor-pointer'
-                        : 'bg-[#070b18] text-slate-400 border border-slate-800 hover:border-slate-700 cursor-pointer'
-                    }`}
-                    title={totalPages <= 1 ? 'Double-sided printing requires at least 2 pages' : ''}
-                  >
-                    Double-Sided
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                  Pages Per Sheet (Collate Layout)
-                </label>
-                <select
-                  value={pagesPerSheet}
-                  onChange={(e) => {
-                    setPagesPerSheet(Number(e.target.value));
-                    setCurrentSheet(1);
-                  }}
-                  className="w-full bg-[#070b18] border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
-                >
-                  <option value={1}>1 Page per Sheet (Standard 1-Up)</option>
-                  <option value={2}>2 Pages per Sheet (2-in-1 Layout)</option>
-                  <option value={4}>4 Pages per Sheet (4-in-1 Quad Layout)</option>
-                  <option value={8}>8 Pages per Sheet (8-in-1 Compact Sheet)</option>
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                  Page Range
-                </label>
-                <select
-                  value={pageRange}
-                  onChange={(e) => setPageRange(e.target.value)}
-                  className="w-full bg-[#070b18] border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
-                >
-                  <option value="all">All Pages</option>
-                  <option value="custom">Custom Range</option>
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                    Paper Size
-                  </label>
-                  <select
-                    value={paperSize}
-                    onChange={(e) => setPaperSize(e.target.value as any)}
-                    className="w-full bg-[#070b18] border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
-                  >
-                    <option value="A4 Standard">A4 Standard</option>
-                    <option value="Legal">Legal</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                    Orientation
-                  </label>
-                  <select
-                    value={orientation}
-                    onChange={(e) => setOrientation(e.target.value as any)}
-                    className="w-full bg-[#070b18] border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
-                  >
-                    <option value="Portrait">Portrait</option>
-                    <option value="Landscape">Landscape</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 pt-1">
-                <button
-                  type="button"
-                  onClick={handleRotate}
-                  className="py-2.5 px-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl transition-all shadow-lg flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <span>↺</span>
-                  <span>Rotate ({rotation}°)</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setIsFullFit((prev) => !prev)}
-                  className={`py-2.5 px-3 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 border cursor-pointer ${
-                    isFullFit
-                      ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg'
-                      : 'bg-[#070b18] border-slate-800 text-slate-300'
-                  }`}
-                >
-                  <span>⛶</span>
-                  <span>{isFullFit ? 'Fit Page: Edge Fit' : 'Fit Page: Auto Margin'}</span>
-                </button>
-              </div>
-
-              <div className="space-y-1">
-                <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                  Number of Copies
-                </label>
-                <div className="flex items-center gap-2 bg-[#070b18] border border-slate-800 rounded-xl p-1 w-fit">
-                  <button
-                    type="button"
-                    onClick={() => setCopies(Math.max(1, copies - 1))}
-                    className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center justify-center text-xs cursor-pointer"
-                  >
-                    -
-                  </button>
-                  <span className="w-8 text-center font-mono font-bold text-xs text-white">
-                    {copies}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setCopies(copies + 1)}
-                    className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center justify-center text-xs cursor-pointer"
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
-
-              <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs">
-                <div className="space-y-0.5 text-slate-400 text-[11px]">
-                  <div>Total Pages: <span className="font-mono text-slate-200">{totalPages}</span></div>
-                  <div>Sheets to Print: <span className="font-mono text-slate-200">{sheetsToPrint * copies}</span></div>
-                </div>
-                <div className="text-right">
-                  <div className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Total Cost:</div>
-                  <div className="text-xl font-bold font-mono text-emerald-400">₹{totalCost.toFixed(2)}</div>
-                </div>
+                {isCompleted && (
+                  <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-center space-y-1.5">
+                    <p className="text-xs font-bold text-emerald-400 flex items-center justify-center gap-1.5">
+                      <span>✨</span>
+                      <span>Print Completed Successfully!</span>
+                    </p>
+                    <p className="text-[11px] text-slate-200 leading-relaxed font-sans">
+                      🔒 For your privacy, your file was shredded from memory and permanently wiped.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <button
-                type="button"
-                disabled={paying || files.length === 0}
-                onClick={handleConfirmAndPay}
-                className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-bold text-xs tracking-wider rounded-xl transition-all shadow-lg cursor-pointer"
+                onClick={() => {
+                  setPlacedOrder(null);
+                  setFiles([]);
+                }}
+                className="px-6 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-all cursor-pointer"
               >
-                {paying ? 'Rendering & Spooling to Printer...' : 'Confirm and Pay'}
+                Print Another Document
               </button>
             </div>
-          </div>
-        )}
-      </main>
+          ) : (
+            <div className="space-y-6">
+              <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-5 shadow-2xl space-y-4">
+                <h2 className="text-center text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  Upload Document
+                </h2>
+
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border border-dashed border-slate-700 hover:border-indigo-500/80 rounded-xl p-6 text-center cursor-pointer bg-[#070b18]/60 transition-all"
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept=".pdf,.png,.jpg,.jpeg,.webp"
+                    className="hidden"
+                    onChange={handleFilesSelect}
+                  />
+                  <div className="text-2xl mb-1">📄</div>
+                  <div className="text-xs font-semibold text-white">Click to Upload Document / Image</div>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Supports PDF, PNG, JPG, JPEG, WEBP</p>
+                </div>
+
+                <div className="text-center">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="text-xs text-indigo-400 hover:text-indigo-300 font-medium py-1 px-3 rounded-lg hover:bg-indigo-500/10 transition-all inline-flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>+</span>
+                    <span>Add Another File</span>
+                  </button>
+                </div>
+
+                {files.length > 0 && (
+                  <div className="space-y-1.5 pt-1">
+                    {files.map((f) => (
+                      <div
+                        key={f.id}
+                        className="flex items-center justify-between bg-[#070b18] border border-slate-800/90 px-3 py-2 rounded-lg text-xs"
+                      >
+                        <div className="flex items-center gap-2 truncate max-w-[85%]">
+                          <span className="text-slate-400">📄</span>
+                          <span className="text-slate-200 truncate">{f.name}</span>
+                          <span className="text-[10px] text-slate-500">({f.pages} p...)</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeFile(f.id)}
+                          className="text-rose-400 hover:text-rose-300 text-xs px-1 cursor-pointer"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-5 shadow-2xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                    Live Print Preview
+                  </h2>
+                  <span className="text-[10px] font-mono text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded">
+                    Format: {paperSize} • {orientation}
+                  </span>
+                </div>
+
+                <div className="flex flex-col items-center justify-center min-h-[380px] py-2">
+                  {files.length === 0 ? (
+                    <div className="text-center space-y-2 text-slate-500">
+                      <div className="text-3xl">📄</div>
+                      <p className="text-xs">Upload a file to see live sheet preview</p>
+                    </div>
+                  ) : (
+                    <div className="w-full flex flex-col items-center space-y-4">
+                      <div className="bg-slate-900/50 p-2 rounded-xl border border-slate-800 flex items-center justify-center max-w-full">
+                        <canvas
+                          ref={previewCanvasRef}
+                          className="bg-white rounded shadow-2xl transition-all duration-200 border border-slate-300 max-w-full max-h-[440px] h-auto object-contain"
+                        />
+                      </div>
+
+                      {totalPreviewSheets > 1 && (
+                        <div className="flex items-center gap-3 text-xs font-mono text-slate-400 pt-1">
+                          <button
+                            type="button"
+                            disabled={currentSheet <= 1}
+                            onClick={() => setCurrentSheet((prev) => Math.max(1, prev - 1))}
+                            className="px-2 py-1 bg-[#070b18] hover:bg-slate-800 disabled:opacity-30 rounded border border-slate-800 text-[11px] cursor-pointer"
+                          >
+                            ← Prev
+                          </button>
+                          <span>
+                            Sheet {currentSheet} of {totalPreviewSheets}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={currentSheet >= totalPreviewSheets}
+                            onClick={() => setCurrentSheet((prev) => Math.min(totalPreviewSheets, prev + 1))}
+                            className="px-2 py-1 bg-[#070b18] hover:bg-slate-800 disabled:opacity-30 rounded border border-slate-800 text-[11px] cursor-pointer"
+                          >
+                            Next →
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-5 shadow-2xl space-y-4">
+                <h2 className="text-center text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  Print Settings & Payment
+                </h2>
+
+                <div className="space-y-1 pt-1">
+                  <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                    Color Mode
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setColorMode('bw')}
+                      className={`py-2 px-3 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+                        colorMode === 'bw'
+                          ? 'bg-indigo-600 text-white shadow'
+                          : 'bg-[#070b18] text-slate-400 border border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      B & W (₹{bwSingleRate})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setColorMode('color')}
+                      className={`py-2 px-3 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+                        colorMode === 'color'
+                          ? 'bg-indigo-600 text-white shadow'
+                          : 'bg-[#070b18] text-slate-400 border border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      Color (₹{colorSingleRate})
+                    </button>
+                  </div>
+                </div>
+
+                {/* SIDES (Auto-Faded & Disabled when totalPages <= 1) */}
+                <div className="space-y-1">
+                  <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                    Printing Side
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSideMode('single')}
+                      className={`py-2 px-3 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+                        sideMode === 'single'
+                          ? 'bg-indigo-600 text-white shadow'
+                          : 'bg-[#070b18] text-slate-400 border border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      Single-Sided
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={totalPages <= 1}
+                      onClick={() => setSideMode('double')}
+                      className={`py-2 px-3 rounded-xl text-xs font-medium transition-all ${
+                        totalPages <= 1
+                          ? 'opacity-30 cursor-not-allowed bg-[#070b18] text-slate-500 border border-slate-800/50'
+                          : sideMode === 'double'
+                          ? 'bg-indigo-600 text-white shadow cursor-pointer'
+                          : 'bg-[#070b18] text-slate-400 border border-slate-800 hover:border-slate-700 cursor-pointer'
+                      }`}
+                      title={totalPages <= 1 ? 'Double-sided printing requires at least 2 pages' : ''}
+                    >
+                      Double-Sided
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                    Pages Per Sheet (Collate Layout)
+                  </label>
+                  <select
+                    value={pagesPerSheet}
+                    onChange={(e) => {
+                      setPagesPerSheet(Number(e.target.value));
+                      setCurrentSheet(1);
+                    }}
+                    className="w-full bg-[#070b18] border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                  >
+                    <option value={1}>1 Page per Sheet (Standard 1-Up)</option>
+                    <option value={2}>2 Pages per Sheet (2-in-1 Layout)</option>
+                    <option value={4}>4 Pages per Sheet (4-in-1 Quad Layout)</option>
+                    <option value={8}>8 Pages per Sheet (8-in-1 Compact Sheet)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                    Page Range
+                  </label>
+                  <select
+                    value={pageRange}
+                    onChange={(e) => setPageRange(e.target.value)}
+                    className="w-full bg-[#070b18] border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                  >
+                    <option value="all">All Pages</option>
+                    <option value="custom">Custom Range</option>
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                      Paper Size
+                    </label>
+                    <select
+                      value={paperSize}
+                      onChange={(e) => setPaperSize(e.target.value as any)}
+                      className="w-full bg-[#070b18] border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value="A4 Standard">A4 Standard</option>
+                      <option value="Legal">Legal</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                      Orientation
+                    </label>
+                    <select
+                      value={orientation}
+                      onChange={(e) => setOrientation(e.target.value as any)}
+                      className="w-full bg-[#070b18] border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value="Portrait">Portrait</option>
+                      <option value="Landscape">Landscape</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleRotate}
+                    className="py-2.5 px-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl transition-all shadow-lg flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <span>↺</span>
+                    <span>Rotate ({rotation}°)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsFullFit((prev) => !prev)}
+                    className={`py-2.5 px-3 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 border cursor-pointer ${
+                      isFullFit
+                        ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg'
+                        : 'bg-[#070b18] border-slate-800 text-slate-300'
+                    }`}
+                  >
+                    <span>⛶</span>
+                    <span>{isFullFit ? 'Fit Page: Edge Fit' : 'Fit Page: Auto Margin'}</span>
+                  </button>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                    Number of Copies
+                  </label>
+                  <div className="flex items-center gap-2 bg-[#070b18] border border-slate-800 rounded-xl p-1 w-fit">
+                    <button
+                      type="button"
+                      onClick={() => setCopies(Math.max(1, copies - 1))}
+                      className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center justify-center text-xs cursor-pointer"
+                    >
+                      -
+                    </button>
+                    <span className="w-8 text-center font-mono font-bold text-xs text-white">
+                      {copies}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setCopies(copies + 1)}
+                      className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center justify-center text-xs cursor-pointer"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs">
+                  <div className="space-y-0.5 text-slate-400 text-[11px]">
+                    <div>Total Pages: <span className="font-mono text-slate-200">{totalPages}</span></div>
+                    <div>Sheets to Print: <span className="font-mono text-slate-200">{sheetsToPrint * copies}</span></div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Total Cost:</div>
+                    <div className="text-xl font-bold font-mono text-emerald-400">₹{totalCost.toFixed(2)}</div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={paying || files.length === 0}
+                  onClick={handleConfirmAndPay}
+                  className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-bold text-xs tracking-wider rounded-xl transition-all shadow-lg cursor-pointer"
+                >
+                  {paying ? 'Rendering & Spooling to Printer...' : 'Confirm and Pay'}
+                </button>
+              </div>
+            </div>
+          )}
+        </main>
+      </div>
     </div>
   );
 }
