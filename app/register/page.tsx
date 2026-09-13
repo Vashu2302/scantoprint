@@ -1,8 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 
-export default function RegisterMerchantPage() {
+function RegisterMerchantForm() {
+  const searchParams = useSearchParams();
+  const planParam = (searchParams.get('plan') || 'trial').toLowerCase();
+  const cycleParam = (searchParams.get('cycle') || 'monthly').toLowerCase();
+
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [form, setForm] = useState({
@@ -27,7 +32,11 @@ export default function RegisterMerchantPage() {
       const res = await fetch('/api/shops/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form)
+        body: JSON.stringify({
+          ...form,
+          planType: planParam,
+          billingCycle: cycleParam
+        })
       });
 
       const data = await res.json();
@@ -49,10 +58,21 @@ export default function RegisterMerchantPage() {
     }
   };
 
+  const planTitle =
+    planParam === 'premium'
+      ? 'Premium Plan (Unlimited Prints)'
+      : planParam === 'standard'
+      ? 'Standard Plan (500 Pages/mo)'
+      : '7-Day Free Trial (All Access)';
+
   return (
     <main className="min-h-screen bg-[#070b14] text-slate-100 flex items-center justify-center p-4">
       <div className="w-full max-w-lg bg-[#0e1626] border border-slate-800 rounded-3xl p-8 shadow-2xl">
         <div className="mb-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-mono font-bold uppercase mb-3">
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
+            <span>Selected: {planTitle}</span>
+          </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
             Create merchant account
           </h1>
@@ -170,5 +190,19 @@ export default function RegisterMerchantPage() {
         </form>
       </div>
     </main>
+  );
+}
+
+export default function RegisterMerchantPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#070b14] text-slate-100 flex items-center justify-center">
+          <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+        </div>
+      }
+    >
+      <RegisterMerchantForm />
+    </Suspense>
   );
 }

@@ -5,6 +5,15 @@ import Link from 'next/link';
 
 export default function HomePage() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
+  const [selectedPlan, setSelectedPlan] = useState<'trial' | 'standard' | 'premium'>('standard');
+
+  const scrollToPlans = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const plansElem = document.getElementById('plans');
+    if (plansElem) {
+      plansElem.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#070b14] text-slate-100 selection:bg-indigo-500 selection:text-white scroll-smooth">
@@ -19,11 +28,11 @@ export default function HomePage() {
           </span>
         </div>
 
-        {/* Sequence: How It Works -> Features -> Plans -> Testimonials -> Help & Support */}
-        <nav className="hidden md:flex items-center gap-7 text-xs font-medium text-slate-400">
+        {/* All links identical style (no standalone highlight on Plans) */}
+        <nav className="hidden md:flex items-center gap-8 text-xs font-medium text-slate-400">
           <a href="#workflow" className="hover:text-white transition-colors">How It Works</a>
           <a href="#features" className="hover:text-white transition-colors">Features</a>
-          <a href="#plans" className="hover:text-white transition-colors font-semibold text-indigo-400">Plans</a>
+          <a href="#plans" className="hover:text-white transition-colors">Plans</a>
           <a href="#testimonials" className="hover:text-white transition-colors">Testimonials</a>
           <a href="#faq" className="hover:text-white transition-colors">Help & Support</a>
         </nav>
@@ -51,16 +60,18 @@ export default function HomePage() {
         <p className="text-sm sm:text-base text-slate-400 max-w-2xl mx-auto leading-relaxed">
           Empower photocopy and print shop owners with zero-touch order processing. Instant UPI payments, and local desktop print auto-sync on scantoprint.in.
         </p>
+
+        {/* Hero CTA with Smooth Scroll */}
         <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
-          <Link
-            href="/register"
-            className="px-6 py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 font-extrabold text-sm text-white shadow-xl shadow-indigo-600/30 transition-all active:scale-95 flex items-center gap-2"
+          <button
+            onClick={scrollToPlans}
+            className="px-6 py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 font-extrabold text-sm text-white shadow-xl shadow-indigo-600/30 transition-all active:scale-95 flex items-center gap-2 cursor-pointer"
           >
             <span>Automate Your Business</span>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
             </svg>
-          </Link>
+          </button>
           <a
             href="#workflow"
             className="px-6 py-3.5 rounded-2xl bg-slate-900 border border-slate-800 hover:bg-slate-800 font-bold text-sm text-slate-300 transition-all"
@@ -165,9 +176,9 @@ export default function HomePage() {
       </section>
 
       {/* ========================================================================= */}
-      {/* 3. TRANSPARENT PRICING & SUBSCRIPTION PLANS                             */}
+      {/* 3. TRANSPARENT PRICING & INTERACTIVE SELECTION CARDS                     */}
       {/* ========================================================================= */}
-      <section id="plans" className="max-w-6xl mx-auto px-6 py-20 space-y-10">
+      <section id="plans" className="max-w-6xl mx-auto px-6 py-20 space-y-10 scroll-mt-16">
         <div className="text-center space-y-3">
           <span className="text-[11px] font-bold text-indigo-400 uppercase tracking-widest bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/20">
             Transparent Pricing
@@ -185,6 +196,7 @@ export default function HomePage() {
               Monthly
             </span>
             <button
+              type="button"
               onClick={() => setBillingCycle(prev => prev === 'monthly' ? 'yearly' : 'monthly')}
               className="w-12 h-6 rounded-full bg-slate-800 p-1 border border-slate-700 flex items-center transition-all cursor-pointer"
             >
@@ -203,18 +215,36 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Pricing Cards Grid */}
+        {/* Interactive Pricing Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
+          
           {/* Card 1: 7-Day Free Trial */}
-          <div className="bg-[#0b1021] border border-slate-800 rounded-3xl p-7 flex flex-col justify-between hover:border-slate-700 transition-all shadow-xl">
+          <div
+            onClick={() => setSelectedPlan('trial')}
+            className={`rounded-3xl p-7 flex flex-col justify-between transition-all duration-300 cursor-pointer shadow-xl ${
+              selectedPlan === 'trial'
+                ? 'bg-[#0f172a] border-2 border-indigo-500 shadow-2xl shadow-indigo-600/20 scale-[1.03]'
+                : 'bg-[#0b1021] border border-slate-800 hover:border-slate-700 opacity-90'
+            }`}
+          >
             <div className="space-y-4">
-              <div className="inline-block text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-800">
-                Risk-Free Test
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-800">
+                  Risk-Free Test
+                </span>
+                {selectedPlan === 'trial' && (
+                  <span className="text-xs font-bold text-indigo-400 flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
+                    Selected
+                  </span>
+                )}
               </div>
+
               <div>
                 <h3 className="text-xl font-bold text-white">7-Day Free Trial</h3>
                 <p className="text-xs text-slate-400 mt-1">Full access to experience automated counter printing.</p>
               </div>
+
               <div className="pt-2">
                 <span className="text-3xl font-black text-white">₹0</span>
                 <span className="text-xs text-slate-400"> / 7 days</span>
@@ -242,8 +272,12 @@ export default function HomePage() {
 
             <div className="pt-6">
               <Link
-                href="/register"
-                className="w-full py-3 block text-center rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition-all border border-slate-700"
+                href={`/register?plan=trial&cycle=${billingCycle}`}
+                className={`w-full py-3 block text-center rounded-xl font-bold text-xs transition-all ${
+                  selectedPlan === 'trial'
+                    ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30'
+                    : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
+                }`}
               >
                 Start 7-Day Free Trial
               </Link>
@@ -251,19 +285,36 @@ export default function HomePage() {
           </div>
 
           {/* Card 2: Standard Plan */}
-          <div className="bg-[#0e1626] border border-indigo-500/40 rounded-3xl p-7 flex flex-col justify-between hover:border-indigo-500 transition-all shadow-2xl relative">
+          <div
+            onClick={() => setSelectedPlan('standard')}
+            className={`rounded-3xl p-7 flex flex-col justify-between transition-all duration-300 cursor-pointer relative shadow-xl ${
+              selectedPlan === 'standard'
+                ? 'bg-[#0f172a] border-2 border-indigo-500 shadow-2xl shadow-indigo-600/25 scale-[1.03]'
+                : 'bg-[#0b1021] border border-slate-800 hover:border-slate-700 opacity-90'
+            }`}
+          >
             <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-600 text-white text-[10px] uppercase font-bold tracking-widest px-3 py-0.5 rounded-full shadow-md">
               Most Popular
             </div>
 
             <div className="space-y-4">
-              <div className="inline-block text-[10px] font-bold text-indigo-400 uppercase tracking-wider bg-indigo-950/60 px-2.5 py-1 rounded-lg border border-indigo-800/50">
-                Small & Medium Shops
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider bg-indigo-950/60 px-2.5 py-1 rounded-lg border border-indigo-800/50">
+                  Small & Medium Shops
+                </span>
+                {selectedPlan === 'standard' && (
+                  <span className="text-xs font-bold text-indigo-400 flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
+                    Selected
+                  </span>
+                )}
               </div>
+
               <div>
                 <h3 className="text-xl font-bold text-white">Standard Plan</h3>
                 <p className="text-xs text-slate-400 mt-1">Perfect for steady daily photocopy & document counters.</p>
               </div>
+
               <div className="pt-2">
                 <span className="text-3xl font-black text-indigo-400">
                   {billingCycle === 'monthly' ? '₹149' : '₹1,499'}
@@ -295,26 +346,47 @@ export default function HomePage() {
 
             <div className="pt-6">
               <Link
-                href="/register"
-                className="w-full py-3 block text-center rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-all shadow-lg shadow-indigo-600/30"
+                href={`/register?plan=standard&cycle=${billingCycle}`}
+                className={`w-full py-3 block text-center rounded-xl font-bold text-xs transition-all ${
+                  selectedPlan === 'standard'
+                    ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30'
+                    : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
+                }`}
               >
-                Choose Standard
+                Choose Standard Plan
               </Link>
             </div>
           </div>
 
           {/* Card 3: Premium Plan */}
-          <div className="bg-[#0b1021] border border-slate-800 rounded-3xl p-7 flex flex-col justify-between hover:border-slate-700 transition-all shadow-xl">
+          <div
+            onClick={() => setSelectedPlan('premium')}
+            className={`rounded-3xl p-7 flex flex-col justify-between transition-all duration-300 cursor-pointer shadow-xl ${
+              selectedPlan === 'premium'
+                ? 'bg-[#0f172a] border-2 border-amber-500 shadow-2xl shadow-amber-500/20 scale-[1.03]'
+                : 'bg-[#0b1021] border border-slate-800 hover:border-slate-700 opacity-90'
+            }`}
+          >
             <div className="space-y-4">
-              <div className="inline-block text-[10px] font-bold text-amber-400 uppercase tracking-wider bg-amber-950/40 px-2.5 py-1 rounded-lg border border-amber-800/40">
-                Heavy Volume Counters
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider bg-amber-950/40 px-2.5 py-1 rounded-lg border border-amber-800/40">
+                  Heavy Volume Counters
+                </span>
+                {selectedPlan === 'premium' && (
+                  <span className="text-xs font-bold text-amber-400 flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                    Selected
+                  </span>
+                )}
               </div>
+
               <div>
                 <h3 className="text-xl font-bold text-white">Premium Plan</h3>
                 <p className="text-xs text-slate-400 mt-1">Unlimited printing capacity for busy universities & cafes.</p>
               </div>
+
               <div className="pt-2">
-                <span className="text-3xl font-black text-white">
+                <span className="text-3xl font-black text-amber-400">
                   {billingCycle === 'monthly' ? '₹249' : '₹2,199'}
                 </span>
                 <span className="text-xs text-slate-400">
@@ -344,10 +416,14 @@ export default function HomePage() {
 
             <div className="pt-6">
               <Link
-                href="/register"
-                className="w-full py-3 block text-center rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition-all border border-slate-700"
+                href={`/register?plan=premium&cycle=${billingCycle}`}
+                className={`w-full py-3 block text-center rounded-xl font-bold text-xs transition-all ${
+                  selectedPlan === 'premium'
+                    ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-600/30'
+                    : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
+                }`}
               >
-                Choose Premium
+                Choose Premium Plan
               </Link>
             </div>
           </div>

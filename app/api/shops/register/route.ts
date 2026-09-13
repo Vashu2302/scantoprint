@@ -8,7 +8,16 @@ const supabase = createClient(
 
 export async function POST(req: Request) {
   try {
-    const { ownerName, businessName, mobile, email, password, upiId } = await req.json();
+    const {
+      ownerName,
+      businessName,
+      mobile,
+      email,
+      password,
+      upiId,
+      planType = 'trial',
+      billingCycle = 'monthly',
+    } = await req.json();
 
     // Basic validation
     if (!mobile || !businessName || !password) {
@@ -34,6 +43,28 @@ export async function POST(req: Request) {
     // Generate unique Desktop Spooler Agent API key
     const secretApiKey = `STP_${Math.random().toString(36).substring(2, 8).toUpperCase()}_${Date.now().toString(36).toUpperCase()}`;
 
+    // Calculate subscription validity & quota based on selected plan
+    const normalizedPlan = planType.toLowerCase();
+    const normalizedCycle = billingCycle.toLowerCase();
+
+    let durationDays = 7;
+    let pageLimit = 500;
+
+    if (normalizedPlan === 'premium') {
+      pageLimit = 999999; // Unlimited pages
+      durationDays = normalizedCycle === 'yearly' ? 365 : 28;
+    } else if (normalizedPlan === 'standard') {
+      pageLimit = 500;
+      durationDays = normalizedCycle === 'yearly' ? 365 : 28;
+    } else {
+      // Free trial
+      pageLimit = 500;
+      durationDays = 7;
+    }
+
+    const calculatedEndDate = new Date();
+    calculatedEndDate.setDate(calculatedEndDate.getDate() + durationDays);
+
     // Insert record into Supabase shops table
     const { data: newShop, error } = await supabase
       .from('shops')
@@ -48,8 +79,12 @@ export async function POST(req: Request) {
           upi_id: upiId || '',
           slug: generatedSlug,
           api_key: secretApiKey,
-          subscription_status: 'active'
-        }
+          subscription_status: 'active',
+          plan_type: normalizedPlan,
+          subscription_end: calculatedEndDate.toISOString(),
+          page_limit: pageLimit,
+          monthly_pages_printed: 0,
+        },
       ])
       .select()
       .single();
@@ -68,7 +103,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       shop: newShop,
-      portalUrl: `https://${newShop.slug}.scantoprint.in`
+      portalUrl: `https://${newShop.slug}.scantoprint.in`,
     });
 
   } catch (err: any) {
