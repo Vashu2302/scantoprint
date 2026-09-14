@@ -204,7 +204,7 @@ export default function AdminSuperDashboard() {
       .update({
         payment_verified: true,
         subscription_status: 'active',
-        is_paused: false
+        is_paused: false,
       })
       .eq('id', shop.id);
 
@@ -226,7 +226,7 @@ export default function AdminSuperDashboard() {
         payment_verified: false,
         subscription_status: 'suspended',
         is_paused: true,
-        agent_status: 'paused'
+        agent_status: 'paused',
       })
       .eq('id', shop.id);
 
@@ -251,7 +251,7 @@ export default function AdminSuperDashboard() {
     const updatePayload: any = {
       is_paused: willPause,
       agent_status: willPause ? 'paused' : 'active',
-      subscription_status: willPause ? 'suspended' : 'active'
+      subscription_status: willPause ? 'suspended' : 'active',
     };
 
     const { error } = await supabase
@@ -323,13 +323,55 @@ export default function AdminSuperDashboard() {
     );
   }
 
-  const totalRevenue = orders
-    .filter((o) => o.payment_status === 'paid' || o.payment_status === 'completed')
-    .reduce((sum, o) => sum + Number(o.amount || 0), 0);
+  // =========================================================================
+  // SAAS SUBSCRIPTION REVENUE COMPUTATION
+  // =========================================================================
+  const getPlanCost = (planType?: string, billingCycle?: string) => {
+    const p = (planType || '').toLowerCase();
+    const c = (billingCycle || '').toLowerCase();
+    if (p === 'standard') {
+      return c === 'yearly' ? 1499 : 149;
+    }
+    if (p === 'premium') {
+      return c === 'yearly' ? 2199 : 249;
+    }
+    return 0; // trial is free
+  };
 
-  const totalPrints = orders
-    .filter((o) => o.print_status === 'completed')
-    .reduce((sum, o) => sum + (Number(o.pages || 1) * Number(o.copies || 1)), 0);
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth();
+
+  let lifetimeSaaSFees = 0;
+  let currentMonthSaaSFees = 0;
+  let activeStandardCount = 0;
+  let activePremiumCount = 0;
+
+  shops.forEach((s) => {
+    const p = (s.plan_type || 'trial').toLowerCase();
+    const cost = getPlanCost(p, s.billing_cycle);
+
+    // If it's a paid tier with an entered or verified UTR
+    if (cost > 0 && (s.payment_utr || s.payment_verified)) {
+      lifetimeSaaSFees += cost;
+
+      // Check if registration / subscription started in the current calendar month
+      const shopDate = s.created_at ? new Date(s.created_at) : null;
+      if (shopDate && shopDate.getFullYear() === currentYear && shopDate.getMonth() === currentMonth) {
+        currentMonthSaaSFees += cost;
+      }
+    }
+
+    // Active subscription counts
+    const isPaused = Boolean(s.is_paused);
+    const subEnd = s.subscription_end ? new Date(s.subscription_end) : new Date();
+    const isExpired = subEnd.getTime() < Date.now();
+
+    if (!isPaused && !isExpired) {
+      if (p === 'standard') activeStandardCount++;
+      if (p === 'premium') activePremiumCount++;
+    }
+  });
 
   const activeShopsCount = shops.filter((s) => {
     return (
@@ -520,24 +562,64 @@ export default function AdminSuperDashboard() {
 
         </div>
 
-        {/* Global Platform Metrics */}
+        {/* ========================================================================= */}
+        {/* REFINED SAAS SUBSCRIPTION REVENUE & ACTIVE METRICS CARDS                  */}
+        {/* ========================================================================= */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-[#0b1021] border border-slate-800 rounded-2xl p-4">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Registered Shops</span>
-            <div className="text-2xl font-bold font-mono text-white mt-1">{shops.length}</div>
+          
+          {/* CARD 1: THIS MONTH'S SUBSCRIPTION EARNINGS */}
+          <div className="bg-[#0b1021] border border-emerald-500/30 rounded-2xl p-4 shadow-lg">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+              This Month&apos;s SaaS Revenue
+            </span>
+            <div className="text-2xl font-black font-mono text-emerald-400 mt-1">
+              ₹{currentMonthSaaSFees.toFixed(2)}
+            </div>
+            <p className="text-[10px] text-slate-500 mt-0.5">
+              1st to {now.getDate()} {now.toLocaleString('default', { month: 'short' })}
+            </p>
           </div>
-          <div className="bg-[#0b1021] border border-slate-800 rounded-2xl p-4">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Spooler Nodes</span>
-            <div className="text-2xl font-bold font-mono text-emerald-400 mt-1">{activeShopsCount} Online</div>
+
+          {/* CARD 2: LIFETIME SUBSCRIPTION EARNINGS */}
+          <div className="bg-[#0b1021] border border-indigo-500/30 rounded-2xl p-4 shadow-lg">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+              Lifetime SaaS Revenue
+            </span>
+            <div className="text-2xl font-black font-mono text-indigo-400 mt-1">
+              ₹{lifetimeSaaSFees.toFixed(2)}
+            </div>
+            <p className="text-[10px] text-slate-500 mt-0.5">
+              Total subscription fees collected
+            </p>
           </div>
-          <div className="bg-[#0b1021] border border-slate-800 rounded-2xl p-4">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Lifetime Platform Revenue</span>
-            <div className="text-2xl font-bold font-mono text-indigo-400 mt-1">₹{totalRevenue.toFixed(2)}</div>
+
+          {/* CARD 3: ACTIVE PAID SUBSCRIBERS */}
+          <div className="bg-[#0b1021] border border-slate-800 rounded-2xl p-4 shadow-lg">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+              Active Paid Subscribers
+            </span>
+            <div className="text-2xl font-black font-mono text-amber-400 mt-1">
+              {activeStandardCount + activePremiumCount} Shops
+            </div>
+            <p className="text-[10px] text-slate-400 mt-0.5 font-mono">
+              {activeStandardCount} Std (₹149) • {activePremiumCount} Prem (₹249)
+            </p>
           </div>
-          <div className="bg-[#0b1021] border border-slate-800 rounded-2xl p-4">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Sheets Printed</span>
-            <div className="text-2xl font-bold font-mono text-amber-400 mt-1">{totalPrints} Sheets</div>
+
+          {/* CARD 4: TOTAL SHOPS & ONLINE NODES */}
+          <div className="bg-[#0b1021] border border-slate-800 rounded-2xl p-4 shadow-lg">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+              Fleet Network Status
+            </span>
+            <div className="text-2xl font-black font-mono text-white mt-1">
+              {activeShopsCount} / {shops.length}
+            </div>
+            <p className="text-[10px] text-emerald-400 mt-0.5 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span>Online Spoolers</span>
+            </p>
           </div>
+
         </div>
 
         {/* Merchant Directory */}
