@@ -15,7 +15,7 @@ export default function VashuExactMerchantDashboard() {
 
   const [shop, setShop] = useState<any>(null);
   const [orders, setOrders] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'queue' | 'pricing' | 'standee'>('standee');
+  const [activeTab, setActiveTab] = useState<'queue' | 'pricing' | 'standee'>('queue');
   const [loading, setLoading] = useState(true);
   const [baseUrl, setBaseUrl] = useState('https://scantoprint.in');
 
@@ -34,6 +34,14 @@ export default function VashuExactMerchantDashboard() {
       setBaseUrl(window.location.origin);
     }
   }, []);
+
+  // Set Dynamic Browser Tab Title based on Shop Name
+  useEffect(() => {
+    if (shop) {
+      const name = shop.business_name || shop.name || 'Store';
+      document.title = `${name} • Counter Dashboard | ScanToPrint`;
+    }
+  }, [shop]);
 
   useEffect(() => {
     async function fetchShopData(isSilent = false) {
@@ -183,14 +191,14 @@ export default function VashuExactMerchantDashboard() {
     );
   }
 
-  // 1. Check if PC heartbeat is active within 25 seconds
+  // 1. Connection check
   const isConnected = Boolean(
     shop.is_online &&
     shop.last_seen &&
     (Date.now() - new Date(shop.last_seen).getTime()) / 1000 < 25
   );
 
-  // 2. Check if Auto-Print Agent is actually active and running
+  // 2. Active status check
   const isAgentActive = isConnected && shop.agent_status === 'active' && !shop.is_paused;
 
   // Subscription calculation
@@ -200,6 +208,11 @@ export default function VashuExactMerchantDashboard() {
     ? 0
     : Math.ceil((subEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
   const planType = (shop?.plan_type || 'trial').toUpperCase();
+
+  // Pages Left Calculation for Standard/Trial plans
+  const totalPageLimit = Number(shop?.page_limit || 500);
+  const printedPagesCount = Number(shop?.monthly_pages_printed || 0);
+  const pagesRemaining = Math.max(0, totalPageLimit - printedPagesCount);
 
   const shopTitle = shop.business_name || shop.name || 'Store';
   const shopInitial = shopTitle.trim().charAt(0).toUpperCase() || 'S';
@@ -304,7 +317,7 @@ export default function VashuExactMerchantDashboard() {
             <span>Download PC Package (.zip)</span>
           </button>
 
-          {/* 3-STATE DYNAMIC STATUS BADGE FOR MERCHANT */}
+          {/* 3-STATE DYNAMIC STATUS BADGE */}
           {!isConnected ? (
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold font-mono bg-rose-500/10 text-rose-400 border border-rose-500/20 shadow-sm">
               <span className="w-2 h-2 rounded-full bg-rose-500"></span>
@@ -324,7 +337,7 @@ export default function VashuExactMerchantDashboard() {
 
           <button
             onClick={() => setActiveTab('queue')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
               activeTab === 'queue'
                 ? 'bg-indigo-600 text-white shadow'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
@@ -334,7 +347,7 @@ export default function VashuExactMerchantDashboard() {
           </button>
           <button
             onClick={() => setActiveTab('pricing')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
               activeTab === 'pricing'
                 ? 'bg-indigo-600 text-white shadow'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
@@ -344,7 +357,7 @@ export default function VashuExactMerchantDashboard() {
           </button>
           <button
             onClick={() => setActiveTab('standee')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
               activeTab === 'standee'
                 ? 'bg-indigo-600 text-white shadow'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
@@ -354,7 +367,7 @@ export default function VashuExactMerchantDashboard() {
           </button>
           <button
             onClick={handleSignOut}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-all ml-1"
+            className="px-3 py-1.5 rounded-lg text-xs font-medium text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-all ml-1 cursor-pointer"
           >
             Sign Out
           </button>
@@ -398,7 +411,9 @@ export default function VashuExactMerchantDashboard() {
           </div>
         </div>
 
-        {/* ACTIVE SUBSCRIPTION CARD */}
+        {/* ========================================================================= */}
+        {/* ACTIVE SUBSCRIPTION, VALIDITY & DYNAMIC REMAINING PAGES BANNER            */}
+        {/* ========================================================================= */}
         <div className="bg-gradient-to-r from-[#0b1021] to-[#0e1626] border border-indigo-500/30 rounded-2xl p-5 shadow-xl flex flex-wrap items-center justify-between gap-4 no-print">
           <div className="flex items-center gap-3.5">
             <div className="w-11 h-11 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-xl text-indigo-400">
@@ -409,13 +424,32 @@ export default function VashuExactMerchantDashboard() {
                 <span className="text-xs font-bold text-white uppercase tracking-wider">
                   Active Subscription:
                 </span>
-                <span className="text-xs font-mono font-black text-indigo-400 uppercase">
+                <span className={`text-xs font-mono font-black uppercase ${
+                  planType === 'PREMIUM' ? 'text-amber-400' : 'text-indigo-400'
+                }`}>
                   {planType} TIER
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                Valid until: <strong className="text-slate-200">{subEnd.toLocaleDateString()}</strong> • {planType === 'PREMIUM' ? 'Unlimited Pages Quota' : `${shop.page_limit || 500} Pages per Month`}
-              </p>
+              
+              {/* Dynamic Pages Left logic */}
+              <div className="text-[11px] text-slate-400 mt-0.5 flex flex-wrap items-center gap-1.5">
+                <span>Valid until: <strong className="text-slate-200">{subEnd.toLocaleDateString()}</strong></span>
+                <span>•</span>
+                {planType === 'PREMIUM' ? (
+                  <span className="font-bold text-amber-400 font-mono flex items-center gap-1">
+                    <span>✨</span>
+                    <span>Unlimited Pages Included</span>
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5">
+                    <span>{totalPageLimit} Pages per Month</span>
+                    <span className="text-slate-600 font-mono">—</span>
+                    <span className="font-bold font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                      {pagesRemaining} Pages Left This Month
+                    </span>
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
