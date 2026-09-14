@@ -46,7 +46,6 @@ export default function ExactCustomerPrintStudio() {
   const [currentSheet, setCurrentSheet] = useState<number>(1);
 
   // Flow & Payment States
-  // 'upload' -> 'payment' -> 'success'
   const [checkoutStep, setCheckoutStep] = useState<'upload' | 'payment' | 'success'>('upload');
   const [paymentMethod, setPaymentMethod] = useState<'upi' | 'cash'>('upi');
   const [isWaitingShopApproval, setIsWaitingShopApproval] = useState<boolean>(false);
@@ -54,20 +53,20 @@ export default function ExactCustomerPrintStudio() {
   const [placedOrder, setPlacedOrder] = useState<any>(null);
   const [printStatus, setPrintStatus] = useState<string>('waiting_approval');
 
-  // Popup Dismiss State (Allows customer to dismiss the popup and prepare settings)
+  // Popup Dismiss State
   const [isPopupDismissed, setIsPopupDismissed] = useState<boolean>(false);
 
   // Total uploaded files count
   const totalPages = files.length;
 
-  // Single page guard: Auto reset to single-sided if only 1 page is present
+  // Single page guard
   useEffect(() => {
     if (totalPages <= 1 && sideMode === 'double') {
       setSideMode('single');
     }
   }, [totalPages, sideMode]);
 
-  // Load Shop & Subscribe to Live Heartbeat (Online/Offline Telemetry)
+  // Load Shop & Subscribe to Live Heartbeat
   useEffect(() => {
     async function loadShop() {
       if (!slug) return;
@@ -84,7 +83,6 @@ export default function ExactCustomerPrintStudio() {
     }
     loadShop();
 
-    // Listen to real-time status updates of the shop PC
     const channel = supabase
       .channel(`shop_online_telemetry_${slug}`)
       .on(
@@ -103,7 +101,6 @@ export default function ExactCustomerPrintStudio() {
       )
       .subscribe();
 
-    // Re-verify heartbeat status every 5 seconds
     const interval = setInterval(async () => {
       if (!slug) return;
       const { data } = await supabase
@@ -120,7 +117,7 @@ export default function ExactCustomerPrintStudio() {
     };
   }, [slug]);
 
-  // Realtime Status Tracking for Placed Order (Detects Shopkeeper Approval in Realtime)
+  // Realtime Status Tracking for Placed Order
   useEffect(() => {
     if (!placedOrder?.id) return;
 
@@ -239,9 +236,7 @@ export default function ExactCustomerPrintStudio() {
     currentSheet * previewItemsPerSheet
   );
 
-  // =========================================================================
-  // CANVAS PREVIEW RENDERER
-  // =========================================================================
+  // Canvas Preview Renderer
   useEffect(() => {
     const canvas = previewCanvasRef.current;
     if (!canvas || files.length === 0) return;
@@ -331,9 +326,7 @@ export default function ExactCustomerPrintStudio() {
     }
   }, [files, currentSheet, pagesPerSheet, orientation, paperSize, rotation, colorMode, isFullFit]);
 
-  // =========================================================================
-  // CLIENT-SIDE MERGED MULTI-PAGE PDF GENERATOR
-  // =========================================================================
+  // Merged Multi-page PDF Generator
   const generatePreviewMatchedPdf = async (): Promise<Blob> => {
     const isLandscape = orientation === 'Landscape';
     const pdf = new jsPDF({
@@ -429,7 +422,7 @@ export default function ExactCustomerPrintStudio() {
     return pdf.output('blob');
   };
 
-  // 1. Confirm & Go to Intermediate Payment Screen
+  // Confirm & Move to Payment Screen
   const handleConfirmAndPay = async () => {
     if (!isShopOnline) {
       alert('Shop printer counter is offline. Please wait until connection is restored.');
@@ -469,8 +462,8 @@ export default function ExactCustomerPrintStudio() {
         pages: totalPreviewSheets,
         copies: copies,
         amount: totalCost,
-        payment_status: 'pending',              // Held pending approval
-        print_status: 'waiting_approval',       // Waiting for merchant prompt
+        payment_status: 'pending',
+        print_status: 'waiting_approval',
         print_type: colorMode,
         sided_type: sideMode,
       };
@@ -497,7 +490,7 @@ export default function ExactCustomerPrintStudio() {
 
       setPlacedOrder(insertedOrder);
       setPrintStatus('waiting_approval');
-      setCheckoutStep('payment'); // Move to payment screen
+      setCheckoutStep('payment');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err: any) {
       alert('Order generation failed: ' + err.message);
@@ -506,13 +499,12 @@ export default function ExactCustomerPrintStudio() {
     }
   };
 
-  // 2. Customer clicks "I Have Paid"
+  // Customer clicks "I Have Paid"
   const handleCustomerIHavePaid = async () => {
     if (!placedOrder) return;
     setIsWaitingShopApproval(true);
 
     try {
-      // Signal to database that customer has initiated payment & is waiting for PC approval
       await supabase
         .from('orders')
         .update({
@@ -544,7 +536,6 @@ export default function ExactCustomerPrintStudio() {
     );
   }
 
-  // Live Check: Is shop PC active and heartbeat refreshed within last 25 seconds?
   const isShopOnline = Boolean(
     shop.is_online &&
     shop.agent_status === 'active' &&
@@ -557,10 +548,10 @@ export default function ExactCustomerPrintStudio() {
   const isCompleted = printStatus === 'completed' || printStatus === 'printed';
   const isPrinting = printStatus === 'printing' || printStatus === 'processing';
 
-  // Dynamic UPI String Generator
+  // Standard P2P Deep Link (Cleaned to prevent Paytm Protect risk flag)
   const shopUpi = shop.upi_id || '9826000000@ybl';
   const encodedShopName = encodeURIComponent(shopTitle);
-  const upiDeepLink = `upi://pay?pa=${shopUpi}&pn=${encodedShopName}&am=${totalCost.toFixed(2)}&cu=INR&tn=Print%20Order`;
+  const upiDeepLink = `upi://pay?pa=${shopUpi}&pn=${encodedShopName}&am=${totalCost.toFixed(2)}&cu=INR`;
   const upiQrImageSrc = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiDeepLink)}`;
 
   const shouldBlur = !isShopOnline && !isPopupDismissed && checkoutStep === 'upload';
@@ -639,9 +630,7 @@ export default function ExactCustomerPrintStudio() {
         {/* Main Content Area */}
         <main className="max-w-3xl mx-auto px-4 pt-6">
 
-          {/* ========================================================================= */}
-          {/* STEP 2: INTERMEDIARY PAYMENT SCREEN WITH UPI / CASH AND LIVE APPROVAL     */}
-          {/* ========================================================================= */}
+          {/* STEP 2: PAYMENT SCREEN */}
           {checkoutStep === 'payment' && placedOrder && (
             <div className="bg-[#0b1021] border border-slate-800/90 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 text-center animate-in fade-in zoom-in-95 duration-200">
               
@@ -669,7 +658,7 @@ export default function ExactCustomerPrintStudio() {
                 </div>
               </div>
 
-              {/* Payment Method Switcher (UPI / CASH) */}
+              {/* Payment Method Switcher */}
               <div className="max-w-sm mx-auto grid grid-cols-2 gap-2 bg-[#070b18] p-1.5 rounded-2xl border border-slate-800">
                 <button
                   type="button"
@@ -697,7 +686,7 @@ export default function ExactCustomerPrintStudio() {
                 </button>
               </div>
 
-              {/* UPI QR & APP LAUNCH SECTION */}
+              {/* UPI Section */}
               {paymentMethod === 'upi' ? (
                 <div className="space-y-4 max-w-sm mx-auto">
                   <div className="bg-white rounded-3xl p-4 shadow-xl text-slate-900 space-y-2 inline-block">
@@ -714,21 +703,29 @@ export default function ExactCustomerPrintStudio() {
                     </span>
                   </div>
 
+                  {/* Fallback & Paytm Protect Guidance */}
+                  <div className="bg-[#070b18] border border-slate-800/80 rounded-xl p-3 text-left space-y-1 font-sans">
+                    <div className="flex items-center gap-1.5 text-[11px] text-amber-400 font-semibold">
+                      <span>💡</span>
+                      <span>App showing &apos;UPI Risk Policy&apos; warning?</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 leading-relaxed">
+                      Simply scan the QR above using your payment app scanner, or choose <b className="text-emerald-400">&apos;Pay with Cash&apos;</b> at the counter.
+                    </p>
+                  </div>
+
                   <div>
                     <a
                       href={upiDeepLink}
                       className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <span>🚀</span>
-                      <span>Open Any UPI App (₹{placedOrder.amount})</span>
+                      <span>Pay via Any UPI App (₹{placedOrder.amount})</span>
                     </a>
-                    <p className="text-[10px] text-slate-500 mt-1">
-                      Tap above if you are browsing from your smartphone.
-                    </p>
                   </div>
                 </div>
               ) : (
-                /* CASH SECTION */
+                /* Cash Section */
                 <div className="bg-[#070b18] border border-slate-800 rounded-2xl p-6 max-w-sm mx-auto space-y-3">
                   <div className="text-3xl">💵</div>
                   <h3 className="text-sm font-bold text-white">Cash Counter Payment</h3>
@@ -738,7 +735,7 @@ export default function ExactCustomerPrintStudio() {
                 </div>
               )}
 
-              {/* I HAVE PAID / CONFIRMATION BUTTON & WAITING OVERLAY */}
+              {/* Approval Notification / Action */}
               <div className="max-w-sm mx-auto pt-2 space-y-3">
                 {isWaitingShopApproval ? (
                   <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 text-center space-y-2 animate-pulse">
@@ -773,9 +770,7 @@ export default function ExactCustomerPrintStudio() {
             </div>
           )}
 
-          {/* ========================================================================= */}
-          {/* STEP 3: PAYMENT CONFIRMED / LIVE PRINTING STREAM                          */}
-          {/* ========================================================================= */}
+          {/* STEP 3: CONFIRMED / PRINTING */}
           {checkoutStep === 'success' && placedOrder && (
             <div className="bg-[#0b1021] border border-slate-800/90 rounded-3xl p-6 sm:p-10 shadow-2xl space-y-6 text-center animate-in fade-in zoom-in-95 duration-200">
               <div className="w-16 h-16 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-3xl flex items-center justify-center mx-auto text-3xl shadow-lg shadow-emerald-500/10">
@@ -868,9 +863,7 @@ export default function ExactCustomerPrintStudio() {
             </div>
           )}
 
-          {/* ========================================================================= */}
-          {/* STEP 1: DOCUMENT UPLOAD & SETTINGS STUDIO                                */}
-          {/* ========================================================================= */}
+          {/* STEP 1: UPLOAD & SETTINGS */}
           {checkoutStep === 'upload' && (
             <div className="space-y-6">
               <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-5 shadow-2xl space-y-4">
