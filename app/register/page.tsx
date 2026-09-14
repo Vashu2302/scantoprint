@@ -35,6 +35,11 @@ function RegisterMerchantForm() {
     password: ''
   });
 
+  // Dynamic Browser Tab Title
+  useEffect(() => {
+    document.title = 'Create Merchant Account • ScanToPrint';
+  }, []);
+
   useEffect(() => {
     async function loadAdminUpi() {
       try {
@@ -131,23 +136,26 @@ function RegisterMerchantForm() {
     }
   };
 
+  // 2. Submit UTR via Secure Server API and Land on Dashboard
   const handleUtrSubmitAndRedirect = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!registeredShop) return;
+    if (!registeredShop || !utrNumber.trim()) return;
 
     setSubmittingUtr(true);
     try {
-      await supabase
-        .from('shops')
-        .update({
-          payment_utr: utrNumber.trim(),
-          payment_verified: false,
-          subscription_status: 'active'
-        })
-        .eq('id', registeredShop.id);
+      await fetch('/api/shops/submit-utr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shopId: registeredShop.id,
+          utrNumber: utrNumber.trim(),
+        }),
+      });
 
+      // Redirect immediately to dashboard
       window.location.replace(`/dashboard/${registeredShop.slug}`);
-    } catch (err: any) {
+    } catch (err) {
+      // Fallback redirect so user is never blocked
       window.location.replace(`/dashboard/${registeredShop.slug}`);
     }
   };

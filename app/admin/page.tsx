@@ -12,6 +12,11 @@ const supabase = createClient(
 export default function AdminSuperDashboard() {
   const router = useRouter();
 
+  // Dynamic Browser Tab Title
+  useEffect(() => {
+    document.title = 'Central Admin Control • ScanToPrint';
+  }, []);
+
   // Authentication & Data State
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [inputPassword, setInputPassword] = useState('');
@@ -190,9 +195,7 @@ export default function AdminSuperDashboard() {
     }
   };
 
-  // =========================================================================
   // UTR SUBSCRIPTION VERIFICATION ACTIONS
-  // =========================================================================
   const handleApproveUtr = async (shop: any) => {
     if (!confirm(`Confirm payment received for "${shop.business_name || shop.name}" (UTR: ${shop.payment_utr})?`)) return;
 
@@ -337,7 +340,6 @@ export default function AdminSuperDashboard() {
     );
   }).length;
 
-  // Filter pending verification shops
   const pendingUtrShops = shops.filter((s) => s.payment_utr && s.payment_verified !== true);
 
   const filteredShops = shops.filter(
@@ -376,9 +378,7 @@ export default function AdminSuperDashboard() {
           </div>
         </header>
 
-        {/* ========================================================================= */}
-        {/* PENDING UTR SUBSCRIPTION VERIFICATIONS ALERT BOX                          */}
-        {/* ========================================================================= */}
+        {/* PENDING UTR ALERT BOX */}
         {pendingUtrShops.length > 0 && (
           <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-5 shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
@@ -605,7 +605,7 @@ export default function AdminSuperDashboard() {
                         </a>
                       </td>
 
-                      {/* Plan & UTR Verification Status */}
+                      {/* Plan & Clean UTR Verification Column */}
                       <td className="p-3.5">
                         <div className="space-y-1.5">
                           <div className="flex items-center gap-1.5">
@@ -633,16 +633,16 @@ export default function AdminSuperDashboard() {
                             )}
                           </div>
 
-                          {/* UTR Verification Tag & Action */}
+                          {/* UTR Details / Plan Condition */}
                           {s.payment_utr ? (
                             <div className="space-y-1">
                               <div className="text-[10px] font-mono text-slate-300 bg-slate-900 px-2 py-1 rounded border border-slate-800 flex items-center justify-between gap-1">
                                 <span className="text-slate-500">UTR:</span>
-                                <span className="font-bold text-amber-400 select-all">{s.payment_utr}</span>
+                                <span className="font-bold text-amber-400 select-all tracking-wider">{s.payment_utr}</span>
                               </div>
                               {isUtrVerified ? (
                                 <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 block w-fit">
-                                  ✓ UTR VERIFIED
+                                  ✓ VERIFIED
                                 </span>
                               ) : (
                                 <div className="flex items-center gap-1.5 pt-0.5">
@@ -661,8 +661,12 @@ export default function AdminSuperDashboard() {
                                 </div>
                               )}
                             </div>
+                          ) : planType === 'TRIAL' ? (
+                            <span className="text-[10px] text-slate-500 font-mono block">Free Trial Plan</span>
                           ) : (
-                            <span className="text-[10px] text-slate-500 font-mono block">No UTR (Trial)</span>
+                            <span className="text-[10px] text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded font-mono block w-fit">
+                              ⚠️ UTR Missing
+                            </span>
                           )}
                         </div>
                       </td>
