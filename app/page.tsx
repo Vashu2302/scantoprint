@@ -1,11 +1,16 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 
 export default function HomePage() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [selectedPlan, setSelectedPlan] = useState<'trial' | 'standard' | 'premium'>('standard');
+
+  // Dynamic Browser Tab Title for Home Page
+  useEffect(() => {
+    document.title = 'ScanToPrint • Instant Zero-Touch Printing';
+  }, []);
 
   const scrollToPlans = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -28,7 +33,7 @@ export default function HomePage() {
           </span>
         </div>
 
-        {/* All links identical style (no standalone highlight on Plans) */}
+        {/* All links identical style */}
         <nav className="hidden md:flex items-center gap-8 text-xs font-medium text-slate-400">
           <a href="#workflow" className="hover:text-white transition-colors">How It Works</a>
           <a href="#features" className="hover:text-white transition-colors">Features</a>
@@ -175,9 +180,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ========================================================================= */}
-      {/* 3. TRANSPARENT PRICING & INTERACTIVE SELECTION CARDS                     */}
-      {/* ========================================================================= */}
+      {/* 3. Transparent Pricing */}
       <section id="plans" className="max-w-6xl mx-auto px-6 py-20 space-y-10 scroll-mt-16">
         <div className="text-center space-y-3">
           <span className="text-[11px] font-bold text-indigo-400 uppercase tracking-widest bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/20">
@@ -215,7 +218,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Interactive Pricing Cards Grid */}
+        {/* Pricing Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
           
           {/* Card 1: 7-Day Free Trial */}
@@ -430,7 +433,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 4. Customer Reviews & Testimonials */}
+      {/* 4. Customer Reviews */}
       <section id="testimonials" className="max-w-6xl mx-auto px-6 py-16 space-y-8">
         <div className="text-center space-y-2">
           <h2 className="text-2xl sm:text-3xl font-black text-white">Customer Reviews & Testimonials</h2>
@@ -474,7 +477,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 5. Help & Support / FAQ */}
+      {/* 5. Help & Support */}
       <section id="faq" className="max-w-4xl mx-auto px-6 py-16 space-y-6">
         <div className="text-center space-y-2 mb-8">
           <h2 className="text-2xl sm:text-3xl font-black text-white">Help & Support Details</h2>

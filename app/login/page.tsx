@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 
 export default function MerchantLoginPage() {
@@ -8,6 +8,11 @@ export default function MerchantLoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Dynamic Browser Tab Title
+  useEffect(() => {
+    document.title = 'Merchant Sign In • ScanToPrint';
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
