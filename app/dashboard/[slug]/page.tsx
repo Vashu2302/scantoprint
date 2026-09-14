@@ -146,7 +146,6 @@ export default function VashuExactMerchantDashboard() {
     window.print();
   };
 
-  // Direct .zip download via dynamic link from Supabase app_settings
   const handleDownloadSoftware = async () => {
     try {
       const { data } = await supabase
@@ -184,13 +183,15 @@ export default function VashuExactMerchantDashboard() {
     );
   }
 
-  const isOnline = Boolean(
+  // 1. Check if PC heartbeat is active within 25 seconds
+  const isConnected = Boolean(
     shop.is_online &&
     shop.last_seen &&
     (Date.now() - new Date(shop.last_seen).getTime()) / 1000 < 25
   );
 
-  const isActive = isOnline && shop.agent_status === 'active';
+  // 2. Check if Auto-Print Agent is actually active and running
+  const isAgentActive = isConnected && shop.agent_status === 'active' && !shop.is_paused;
 
   // Subscription calculation
   const subEnd = shop?.subscription_end ? new Date(shop.subscription_end) : new Date();
@@ -266,7 +267,6 @@ export default function VashuExactMerchantDashboard() {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="font-bold text-base text-white leading-tight">{shopTitle}</h1>
-              {/* Plan Badge in Header */}
               <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono border ${
                 planType === 'PREMIUM'
                   ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
@@ -284,7 +284,6 @@ export default function VashuExactMerchantDashboard() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Subscription Validity Pill */}
           {isExpired ? (
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30 shadow-sm animate-pulse">
               <span className="w-2 h-2 rounded-full bg-rose-500"></span>
@@ -305,15 +304,21 @@ export default function VashuExactMerchantDashboard() {
             <span>Download PC Package (.zip)</span>
           </button>
 
-          {isOnline ? (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-sm">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              CONNECTED
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20 shadow-sm">
+          {/* 3-STATE DYNAMIC STATUS BADGE FOR MERCHANT */}
+          {!isConnected ? (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold font-mono bg-rose-500/10 text-rose-400 border border-rose-500/20 shadow-sm">
               <span className="w-2 h-2 rounded-full bg-rose-500"></span>
               OFFLINE
+            </span>
+          ) : !isAgentActive ? (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold font-mono bg-amber-500/10 text-amber-400 border border-amber-500/25 shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+              CONNECTED BUT INACTIVE
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              ACTIVE
             </span>
           )}
 
@@ -393,9 +398,7 @@ export default function VashuExactMerchantDashboard() {
           </div>
         </div>
 
-        {/* ========================================================================= */}
-        {/* ACTIVE SUBSCRIPTION & DAYS LEFT METRIC CARD                             */}
-        {/* ========================================================================= */}
+        {/* ACTIVE SUBSCRIPTION CARD */}
         <div className="bg-gradient-to-r from-[#0b1021] to-[#0e1626] border border-indigo-500/30 rounded-2xl p-5 shadow-xl flex flex-wrap items-center justify-between gap-4 no-print">
           <div className="flex items-center gap-3.5">
             <div className="w-11 h-11 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-xl text-indigo-400">
