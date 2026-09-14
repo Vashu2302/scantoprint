@@ -23,6 +23,11 @@ export default function AdminSuperDashboard() {
   const [orders, setOrders] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Dynamic Admin UPI Manager
+  const [adminUpi, setAdminUpi] = useState('');
+  const [isSavingUpi, setIsSavingUpi] = useState(false);
+  const [upiStatusMsg, setUpiStatusMsg] = useState('');
+
   // Dynamic Google Drive Agent URL State
   const [agentDriveUrl, setAgentDriveUrl] = useState('');
   const [isSavingUrl, setIsSavingUrl] = useState(false);
@@ -34,7 +39,7 @@ export default function AdminSuperDashboard() {
     if (sessionAuth === 'true') {
       setIsAuthenticated(true);
       fetchAdminData();
-      fetchAgentUrl();
+      fetchPlatformSettings();
     } else {
       setLoading(false);
     }
@@ -55,7 +60,7 @@ export default function AdminSuperDashboard() {
         sessionStorage.setItem('stp_admin_auth', 'true');
         setIsAuthenticated(true);
         fetchAdminData();
-        fetchAgentUrl();
+        fetchPlatformSettings();
       } else {
         setAuthError(true);
       }
@@ -88,26 +93,71 @@ export default function AdminSuperDashboard() {
     setLoading(false);
   };
 
-  // Fetch current Google Drive download URL from app_settings
-  const fetchAgentUrl = async () => {
+  // Fetch platform settings (Admin UPI + Drive Link)
+  const fetchPlatformSettings = async () => {
     try {
-      const { data } = await supabase
+      // 1. Fetch Admin UPI
+      const { data: upiData } = await supabase
+        .from('app_config')
+        .select('value')
+        .eq('key', 'admin_upi_id')
+        .single();
+
+      if (upiData?.value) {
+        setAdminUpi(upiData.value);
+      } else {
+        setAdminUpi('9826000000@ybl');
+      }
+
+      // 2. Fetch Agent Download Link
+      const { data: driveData } = await supabase
         .from('app_settings')
         .select('value')
         .eq('key', 'agent_download_url')
         .single();
 
-      if (data?.value) {
-        setAgentDriveUrl(data.value);
+      if (driveData?.value) {
+        setAgentDriveUrl(driveData.value);
       } else {
         setAgentDriveUrl('https://drive.google.com/uc?export=download&id=18JXGyDe3bhBaJKgnAlqSey-4kGmrtc_j');
       }
     } catch {
+      // Fallbacks
+      setAdminUpi('9826000000@ybl');
       setAgentDriveUrl('https://drive.google.com/uc?export=download&id=18JXGyDe3bhBaJKgnAlqSey-4kGmrtc_j');
     }
   };
 
-  // Save new Google Drive link to Supabase
+  // Save Admin UPI ID
+  const handleSaveAdminUpi = async () => {
+    if (!adminUpi.trim()) {
+      alert('Please enter a valid UPI ID.');
+      return;
+    }
+
+    setIsSavingUpi(true);
+    setUpiStatusMsg('');
+
+    try {
+      const { error } = await supabase
+        .from('app_config')
+        .upsert(
+          { key: 'admin_upi_id', value: adminUpi.trim() },
+          { onConflict: 'key' }
+        );
+
+      if (error) throw error;
+
+      setUpiStatusMsg('✓ Admin Receiver UPI updated! All plan checkouts will now use this UPI.');
+      setTimeout(() => setUpiStatusMsg(''), 4000);
+    } catch (err: any) {
+      alert('Failed to update Admin UPI: ' + err.message);
+    } finally {
+      setIsSavingUpi(false);
+    }
+  };
+
+  // Save new Google Drive link
   const handleSaveAgentUrl = async () => {
     if (!agentDriveUrl.trim()) {
       alert('Please enter a valid URL.');
@@ -119,8 +169,6 @@ export default function AdminSuperDashboard() {
 
     try {
       let finalUrl = agentDriveUrl.trim();
-      
-      // Auto-convert standard view links to direct download links if needed
       if (finalUrl.includes('/file/d/')) {
         const fileId = finalUrl.split('/file/d/')[1].split('/')[0];
         finalUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
@@ -142,6 +190,35 @@ export default function AdminSuperDashboard() {
       alert('Failed to update URL: ' + err.message);
     } finally {
       setIsSavingUrl(false);
+    }
+  };
+
+  // Toggle Pause/Resume Subscription (Hard Lock)
+  const handleToggleShopPause = async (shop: any) => {
+    const willPause = !shop.is_paused;
+    const confirmMsg = willPause
+      ? `Are you sure you want to PAUSE store "${shop.business_name || shop.name}"? Their agent and customer portal will be hard-locked immediately.`
+      : `Resume subscription for store "${shop.business_name || shop.name}"?`;
+
+    if (!confirm(confirmMsg)) return;
+
+    const updatePayload: any = {
+      is_paused: willPause,
+      agent_status: willPause ? 'paused' : 'active',
+      subscription_status: willPause ? 'suspended' : 'active'
+    };
+
+    const { error } = await supabase
+      .from('shops')
+      .update(updatePayload)
+      .eq('id', shop.id);
+
+    if (!error) {
+      setShops((prev) =>
+        prev.map((s) => (s.id === shop.id ? { ...s, ...updatePayload } : s))
+      );
+    } else {
+      alert('Failed to update status: ' + error.message);
     }
   };
 
@@ -211,6 +288,7 @@ export default function AdminSuperDashboard() {
   const activeShopsCount = shops.filter((s) => {
     return (
       s.is_online &&
+      !s.is_paused &&
       s.last_seen &&
       (Date.now() - new Date(s.last_seen).getTime()) / 1000 < 25
     );
@@ -236,7 +314,7 @@ export default function AdminSuperDashboard() {
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Live Fleet Control, Merchant Directory & Deployment Hub
+              Live Fleet Control, Subscription Billing & Merchant Directory
             </p>
           </div>
 
@@ -251,53 +329,92 @@ export default function AdminSuperDashboard() {
         </header>
 
         {/* ========================================================================= */}
-        {/* GOOGLE DRIVE AGENT DOWNLOAD LINK MANAGER                                 */}
+        {/* ROW: DYNAMIC ADMIN UPI MANAGER & DESKTOP SPPOPLER PACKAGE URL            */}
         {/* ========================================================================= */}
-        <div className="bg-[#0b1021] border border-indigo-500/30 rounded-2xl p-5 shadow-xl space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          
+          {/* 1. ADMIN RECEIVER UPI ID MANAGER */}
+          <div className="bg-[#0b1021] border border-emerald-500/30 rounded-2xl p-5 shadow-xl space-y-3">
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="text-indigo-400 font-bold text-sm">📦 Desktop Spooler Package URL (Google Drive)</span>
-                <span className="text-[10px] bg-indigo-500/10 text-indigo-300 px-2 py-0.5 rounded border border-indigo-500/20 font-mono">
-                  Bypasses 50MB Limit
+                <span className="text-emerald-400 font-bold text-sm">💰 Platform Admin Receiver UPI</span>
+                <span className="text-[10px] bg-emerald-500/10 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/20 font-mono">
+                  Live Routing
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                Whenever you create a new .exe, upload it to Google Drive and paste the link here. All shops will instantly get the updated file.
-              </p>
             </div>
-            {agentDriveUrl && (
-              <a
-                href={agentDriveUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs text-indigo-400 hover:text-indigo-300 underline font-mono"
+            <p className="text-[11px] text-slate-400">
+              Money paid by new shopkeepers for Standard/Premium plans lands directly in this UPI. You can change it anytime.
+            </p>
+
+            <div className="flex items-center gap-3 pt-1">
+              <input
+                type="text"
+                placeholder="e.g. yourname@okaxis or 9826xxxxxx@ybl"
+                value={adminUpi}
+                onChange={(e) => setAdminUpi(e.target.value)}
+                className="flex-1 bg-[#070b18] border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-emerald-400 font-mono focus:outline-none focus:border-emerald-500"
+              />
+              <button
+                onClick={handleSaveAdminUpi}
+                disabled={isSavingUpi}
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-emerald-600/30 cursor-pointer whitespace-nowrap"
               >
-                Test Download Link ↗
-              </a>
+                {isSavingUpi ? 'Saving...' : 'Save UPI'}
+              </button>
+            </div>
+
+            {upiStatusMsg && (
+              <p className="text-xs text-emerald-400 font-semibold pt-1">{upiStatusMsg}</p>
             )}
           </div>
 
-          <div className="flex items-center gap-3 pt-1">
-            <input
-              type="text"
-              placeholder="Paste Google Drive Direct/Share Link..."
-              value={agentDriveUrl}
-              onChange={(e) => setAgentDriveUrl(e.target.value)}
-              className="flex-1 bg-[#070b18] border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
-            />
-            <button
-              onClick={handleSaveAgentUrl}
-              disabled={isSavingUrl}
-              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-800 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-indigo-600/30 cursor-pointer whitespace-nowrap"
-            >
-              {isSavingUrl ? 'Saving...' : 'Save Link'}
-            </button>
+          {/* 2. GOOGLE DRIVE AGENT DOWNLOAD LINK MANAGER */}
+          <div className="bg-[#0b1021] border border-indigo-500/30 rounded-2xl p-5 shadow-xl space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-indigo-400 font-bold text-sm">📦 Spooler Package URL (.exe)</span>
+                <span className="text-[10px] bg-indigo-500/10 text-indigo-300 px-2 py-0.5 rounded border border-indigo-500/20 font-mono">
+                  Google Drive Direct
+                </span>
+              </div>
+              {agentDriveUrl && (
+                <a
+                  href={agentDriveUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-indigo-400 hover:text-indigo-300 underline font-mono"
+                >
+                  Test Link ↗
+                </a>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-400">
+              When updating `.exe`, upload to Drive and paste the link here. All shops will receive this updated download link.
+            </p>
+
+            <div className="flex items-center gap-3 pt-1">
+              <input
+                type="text"
+                placeholder="Paste Google Drive Direct/Share Link..."
+                value={agentDriveUrl}
+                onChange={(e) => setAgentDriveUrl(e.target.value)}
+                className="flex-1 bg-[#070b18] border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
+              />
+              <button
+                onClick={handleSaveAgentUrl}
+                disabled={isSavingUrl}
+                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-800 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-indigo-600/30 cursor-pointer whitespace-nowrap"
+              >
+                {isSavingUrl ? 'Saving...' : 'Save Link'}
+              </button>
+            </div>
+
+            {urlStatusMsg && (
+              <p className="text-xs text-emerald-400 font-semibold pt-1">{urlStatusMsg}</p>
+            )}
           </div>
 
-          {urlStatusMsg && (
-            <p className="text-xs text-emerald-400 font-semibold pt-1">{urlStatusMsg}</p>
-          )}
         </div>
 
         {/* Global Platform Metrics */}
@@ -337,11 +454,11 @@ export default function AdminSuperDashboard() {
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-[#070b18] text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-800">
-                  <th className="p-3.5">Store Details (Click for 360°)</th>
-                  <th className="p-3.5">Plan & Validity</th>
-                  <th className="p-3.5">360° Inspector Link</th>
-                  <th className="p-3.5">Spooler Telemetry</th>
+                  <th className="p-3.5">Store Details</th>
+                  <th className="p-3.5">Plan & UTR Status</th>
+                  <th className="p-3.5">Counter Telemetry</th>
                   <th className="p-3.5">Credentials</th>
+                  <th className="p-3.5">Subscription Lock</th>
                   <th className="p-3.5 text-right">Actions</th>
                 </tr>
               </thead>
@@ -349,21 +466,23 @@ export default function AdminSuperDashboard() {
                 {filteredShops.map((s) => {
                   const isStoreOnline = Boolean(
                     s.is_online &&
+                    !s.is_paused &&
                     s.last_seen &&
                     (Date.now() - new Date(s.last_seen).getTime()) / 1000 < 25
                   );
 
-                  // Subscription validity calculations
+                  // Subscription calculations
                   const subEnd = s.subscription_end ? new Date(s.subscription_end) : new Date();
                   const isExpired = subEnd.getTime() < Date.now();
                   const daysLeft = isExpired
                     ? 0
                     : Math.ceil((subEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
                   const planType = (s.plan_type || 'trial').toUpperCase();
+                  const isPaused = Boolean(s.is_paused);
 
                   return (
                     <tr key={s.id} className="hover:bg-slate-800/20 transition-colors">
-                      {/* Clicking Name opens 360° Inspector */}
+                      {/* Store details */}
                       <td className="p-3.5">
                         <button
                           onClick={() => router.push(`/admin/shops/${s.slug}`)}
@@ -373,54 +492,60 @@ export default function AdminSuperDashboard() {
                           <span className="text-[10px] text-indigo-400 font-mono">⚡ 360°</span>
                         </button>
                         <div className="text-slate-400 text-[11px] mt-0.5">Owner: {s.owner_name || 'N/A'}</div>
-                      </td>
-
-                      {/* Subscription & Days Left Column */}
-                      <td className="p-3.5">
-                        <div className="space-y-1">
-                          <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold font-mono border ${
-                            planType === 'PREMIUM'
-                              ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-                              : planType === 'STANDARD'
-                              ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30'
-                              : 'bg-slate-800 text-slate-300 border-slate-700'
-                          }`}>
-                            {planType}
-                          </span>
-                          <div>
-                            {isExpired ? (
-                              <span className="text-[10px] font-mono font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded inline-block animate-pulse">
-                                EXPIRED
-                              </span>
-                            ) : (
-                              <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded inline-block">
-                                {daysLeft} DAYS LEFT
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Main link points directly to 360° Inspector */}
-                      <td className="p-3.5 font-mono text-[11px]">
-                        <button
-                          onClick={() => router.push(`/admin/shops/${s.slug}`)}
-                          className="text-indigo-400 hover:text-indigo-300 hover:underline font-bold text-left cursor-pointer block"
-                        >
-                          View 360° Inspector ➔
-                        </button>
                         <a
                           href={`/shop/${s.slug}`}
                           target="_blank"
                           rel="noreferrer"
                           className="text-[10px] text-slate-500 hover:text-slate-300 hover:underline inline-block mt-0.5"
                         >
-                          (Customer Upload Page ↗)
+                          (View Customer QR Page ↗)
                         </a>
                       </td>
 
+                      {/* Plan & UTR Verification Status */}
                       <td className="p-3.5">
-                        {isStoreOnline ? (
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold font-mono border ${
+                              planType === 'PREMIUM'
+                                ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                                : planType === 'STANDARD'
+                                ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30'
+                                : 'bg-slate-800 text-slate-300 border-slate-700'
+                            }`}>
+                              {planType}
+                            </span>
+                            {isPaused ? (
+                              <span className="text-[10px] font-mono font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded">
+                                PAUSED
+                              </span>
+                            ) : isExpired ? (
+                              <span className="text-[10px] font-mono font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded animate-pulse">
+                                EXPIRED
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded">
+                                {daysLeft}D LEFT
+                              </span>
+                            )}
+                          </div>
+
+                          {/* UTR Verification Tag */}
+                          {s.payment_utr && (
+                            <div className="text-[10px] font-mono text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                              UTR: {s.payment_utr}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Online Status */}
+                      <td className="p-3.5">
+                        {isPaused ? (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                            ⏸️ DISABLED
+                          </span>
+                        ) : isStoreOnline ? (
                           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                             CONNECTED
@@ -432,10 +557,29 @@ export default function AdminSuperDashboard() {
                           </span>
                         )}
                       </td>
+
+                      {/* Credentials */}
                       <td className="p-3.5 font-mono text-[11px]">
                         <div className="text-slate-300">ID: {s.phone}</div>
                         <div className="text-rose-400 font-bold">Pass: {s.plain_password}</div>
                       </td>
+
+                      {/* PAUSE / RESUME HARD-LOCK TOGGLE */}
+                      <td className="p-3.5">
+                        <button
+                          onClick={() => handleToggleShopPause(s)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow ${
+                            isPaused
+                              ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                              : 'bg-amber-600 hover:bg-amber-500 text-white'
+                          }`}
+                        >
+                          <span>{isPaused ? '▶️' : '⏸️'}</span>
+                          <span>{isPaused ? 'Resume Shop' : 'Pause Shop'}</span>
+                        </button>
+                      </td>
+
+                      {/* Actions */}
                       <td className="p-3.5 text-right space-x-2">
                         <button
                           onClick={() => router.push(`/admin/shops/${s.slug}`)}
