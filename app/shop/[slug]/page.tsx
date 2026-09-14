@@ -51,7 +51,7 @@ export default function ExactCustomerPrintStudio() {
   const [isWaitingShopApproval, setIsWaitingShopApproval] = useState<boolean>(false);
   const [paying, setPaying] = useState<boolean>(false);
   const [placedOrder, setPlacedOrder] = useState<any>(null);
-  const [printStatus, setPrintStatus] = useState<string>('waiting_approval');
+  const [printStatus, setPrintStatus] = useState<string>('draft_payment');
 
   // Popup Dismiss State
   const [isPopupDismissed, setIsPopupDismissed] = useState<boolean>(false);
@@ -59,7 +59,6 @@ export default function ExactCustomerPrintStudio() {
   // Total uploaded files count
   const totalPages = files.length;
 
-  // Single page guard
   useEffect(() => {
     if (totalPages <= 1 && sideMode === 'double') {
       setSideMode('single');
@@ -326,7 +325,7 @@ export default function ExactCustomerPrintStudio() {
     }
   }, [files, currentSheet, pagesPerSheet, orientation, paperSize, rotation, colorMode, isFullFit]);
 
-  // Merged Multi-page PDF Generator
+  // Client-Side PDF Generator
   const generatePreviewMatchedPdf = async (): Promise<Blob> => {
     const isLandscape = orientation === 'Landscape';
     const pdf = new jsPDF({
@@ -422,7 +421,7 @@ export default function ExactCustomerPrintStudio() {
     return pdf.output('blob');
   };
 
-  // Confirm & Move to Payment Screen
+  // 1. Confirm & Move to Payment Screen (Status: draft_payment, PC par alert NAI aayega)
   const handleConfirmAndPay = async () => {
     if (!isShopOnline) {
       alert('Shop printer counter is offline. Please wait until connection is restored.');
@@ -463,7 +462,7 @@ export default function ExactCustomerPrintStudio() {
         copies: copies,
         amount: totalCost,
         payment_status: 'pending',
-        print_status: 'waiting_approval',
+        print_status: 'draft_payment', // PC par alert trigger nahi hoga abhi
         print_type: colorMode,
         sided_type: sideMode,
       };
@@ -489,7 +488,7 @@ export default function ExactCustomerPrintStudio() {
       }
 
       setPlacedOrder(insertedOrder);
-      setPrintStatus('waiting_approval');
+      setPrintStatus('draft_payment');
       setCheckoutStep('payment');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err: any) {
@@ -499,7 +498,7 @@ export default function ExactCustomerPrintStudio() {
     }
   };
 
-  // Customer clicks "I Have Paid"
+  // 2. Customer clicks "I Have Paid" (AB PC par alert & popup jaayega!)
   const handleCustomerIHavePaid = async () => {
     if (!placedOrder) return;
     setIsWaitingShopApproval(true);
@@ -509,7 +508,7 @@ export default function ExactCustomerPrintStudio() {
         .from('orders')
         .update({
           payment_status: 'awaiting_confirmation',
-          print_status: 'waiting_approval',
+          print_status: 'waiting_approval', // AB Agent ko trigger milega
         })
         .eq('id', placedOrder.id);
     } catch (e) {
@@ -548,7 +547,6 @@ export default function ExactCustomerPrintStudio() {
   const isCompleted = printStatus === 'completed' || printStatus === 'printed';
   const isPrinting = printStatus === 'printing' || printStatus === 'processing';
 
-  // Standard P2P Deep Link (Cleaned to prevent Paytm Protect risk flag)
   const shopUpi = shop.upi_id || '9826000000@ybl';
   const encodedShopName = encodeURIComponent(shopTitle);
   const upiDeepLink = `upi://pay?pa=${shopUpi}&pn=${encodedShopName}&am=${totalCost.toFixed(2)}&cu=INR`;
@@ -703,7 +701,6 @@ export default function ExactCustomerPrintStudio() {
                     </span>
                   </div>
 
-                  {/* Fallback & Paytm Protect Guidance */}
                   <div className="bg-[#070b18] border border-slate-800/80 rounded-xl p-3 text-left space-y-1 font-sans">
                     <div className="flex items-center gap-1.5 text-[11px] text-amber-400 font-semibold">
                       <span>💡</span>
