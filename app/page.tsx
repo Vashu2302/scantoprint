@@ -486,8 +486,16 @@ export default function HomePage() {
         </div>
       </section>
 
-      <footer className="border-t border-slate-800/80 py-8 px-6 text-center text-xs text-slate-500">
-        © 2026 ScanToPrint.in. All rights reserved. Automated Cloud Printing System.
+      {/* Footer with Legal Link */}
+      <footer className="border-t border-slate-800/80 py-8 px-6 text-center text-xs text-slate-500 space-y-2">
+        <div>
+          © 2026 ScanToPrint.in. All rights reserved. Automated Cloud Printing System.
+        </div>
+        <div className="flex items-center justify-center gap-4 text-[11px] text-slate-400">
+          <Link href="/legal" className="hover:text-indigo-400 underline underline-offset-4 transition-colors">
+            Privacy Policy, Terms of Service & Refunds
+          </Link>
+        </div>
       </footer>
     </div>
   );

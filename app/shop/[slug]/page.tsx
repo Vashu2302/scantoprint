@@ -19,6 +19,16 @@ interface UploadedDoc {
   imgObj?: HTMLImageElement;
 }
 
+// Allowed File Types & 25MB Limit Guard
+const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
+const ALLOWED_MIME_TYPES = [
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+  'image/jpg',
+  'image/webp'
+];
+
 export default function ExactCustomerPrintStudio() {
   const params = useParams();
   const slug = params?.slug as string;
@@ -26,9 +36,10 @@ export default function ExactCustomerPrintStudio() {
   const [shop, setShop] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // Files
+  // Files & Validation State
   const [files, setFiles] = useState<UploadedDoc[]>([]);
   const [isProcessingPdf, setIsProcessingPdf] = useState(false);
+  const [uploadError, setUploadError] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -191,7 +202,7 @@ export default function ExactCustomerPrintStudio() {
     });
   };
 
-  // Convert PDF Pages to Image Objects for Crisp Canvas Rendering
+  // Convert PDF Pages to Image Objects
   const convertPdfToPages = async (file: File): Promise<UploadedDoc[]> => {
     const pdfjs = await loadPdfJs();
     const arrayBuffer = await file.arrayBuffer();
@@ -235,14 +246,40 @@ export default function ExactCustomerPrintStudio() {
     return parsedPages;
   };
 
+  // SECURE FILE SELECTION WITH VALIDATION
   const handleFilesSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    setUploadError('');
     if (e.target.files && e.target.files.length > 0) {
       const selectedFiles = Array.from(e.target.files);
+      const validFiles: File[] = [];
+
+      for (const f of selectedFiles) {
+        // 1. Check Max Size (25MB)
+        if (f.size > MAX_FILE_SIZE_BYTES) {
+          setUploadError(`"${f.name}" is larger than 25MB limit. Please upload a compressed document.`);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+          return;
+        }
+
+        // 2. Strict MIME-Type & Extension Check
+        const ext = f.name.slice(((f.name.lastIndexOf('.') - 1) >>> 0) + 2).toLowerCase();
+        const isMimeValid = ALLOWED_MIME_TYPES.includes(f.type);
+        const isExtValid = ['pdf', 'png', 'jpg', 'jpeg', 'webp'].includes(ext);
+
+        if (!isMimeValid && !isExtValid) {
+          setUploadError(`"${f.name}" is an unsupported format. Only PDF and Image files (.pdf, .jpg, .png, .webp) are allowed.`);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+          return;
+        }
+
+        validFiles.push(f);
+      }
+
       setIsProcessingPdf(true);
       const newDocs: UploadedDoc[] = [];
 
       try {
-        for (const f of selectedFiles) {
+        for (const f of validFiles) {
           if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) {
             const pdfPages = await convertPdfToPages(f);
             newDocs.push(...pdfPages);
@@ -268,7 +305,7 @@ export default function ExactCustomerPrintStudio() {
 
         setFiles((prev) => [...prev, ...newDocs]);
       } catch (err: any) {
-        alert('Error processing file: ' + err.message);
+        setUploadError('Error parsing document: ' + err.message);
       } finally {
         setIsProcessingPdf(false);
         if (fileInputRef.current) fileInputRef.current.value = '';
@@ -947,6 +984,23 @@ export default function ExactCustomerPrintStudio() {
                   Upload Document
                 </h2>
 
+                {/* FILE SIZE / FORMAT ERROR BANNER */}
+                {uploadError && (
+                  <div className="bg-rose-500/10 border border-rose-500/30 p-3.5 rounded-xl text-rose-300 text-xs flex items-center justify-between gap-2 animate-in fade-in duration-200">
+                    <div className="flex items-center gap-2">
+                      <span className="text-rose-400 text-sm">⚠️</span>
+                      <span>{uploadError}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setUploadError('')}
+                      className="text-slate-400 hover:text-white text-xs px-1 cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+
                 <div
                   onClick={() => !isProcessingPdf && fileInputRef.current?.click()}
                   className="border border-dashed border-slate-700 hover:border-indigo-500/80 rounded-xl p-6 text-center cursor-pointer bg-[#070b18]/60 transition-all"
@@ -969,7 +1023,7 @@ export default function ExactCustomerPrintStudio() {
                     <>
                       <div className="text-2xl mb-1">📄</div>
                       <div className="text-xs font-semibold text-white">Click to Upload Document / Image</div>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Supports Multi-page PDF, PNG, JPG, JPEG, WEBP</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">Supports Multi-page PDF, PNG, JPG, JPEG, WEBP (Max 25MB)</p>
                     </>
                   )}
                 </div>
