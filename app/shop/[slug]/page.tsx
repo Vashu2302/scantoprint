@@ -45,10 +45,14 @@ export default function ExactCustomerPrintStudio() {
   // Preview Pagination
   const [currentSheet, setCurrentSheet] = useState<number>(1);
 
-  // Payment & Screen States
+  // Flow & Payment States
+  // 'upload' -> 'payment' -> 'success'
+  const [checkoutStep, setCheckoutStep] = useState<'upload' | 'payment' | 'success'>('upload');
+  const [paymentMethod, setPaymentMethod] = useState<'upi' | 'cash'>('upi');
+  const [isWaitingShopApproval, setIsWaitingShopApproval] = useState<boolean>(false);
   const [paying, setPaying] = useState<boolean>(false);
   const [placedOrder, setPlacedOrder] = useState<any>(null);
-  const [printStatus, setPrintStatus] = useState<string>('queued');
+  const [printStatus, setPrintStatus] = useState<string>('waiting_approval');
 
   // Popup Dismiss State (Allows customer to dismiss the popup and prepare settings)
   const [isPopupDismissed, setIsPopupDismissed] = useState<boolean>(false);
@@ -116,7 +120,7 @@ export default function ExactCustomerPrintStudio() {
     };
   }, [slug]);
 
-  // Realtime Status Tracking for Placed Order
+  // Realtime Status Tracking for Placed Order (Detects Shopkeeper Approval in Realtime)
   useEffect(() => {
     if (!placedOrder?.id) return;
 
@@ -131,8 +135,14 @@ export default function ExactCustomerPrintStudio() {
           filter: `id=eq.${placedOrder.id}`,
         },
         (payload: any) => {
-          if (payload.new && payload.new.print_status) {
-            setPrintStatus(payload.new.print_status);
+          if (payload.new) {
+            if (payload.new.payment_status === 'paid') {
+              setCheckoutStep('success');
+              setIsWaitingShopApproval(false);
+            }
+            if (payload.new.print_status) {
+              setPrintStatus(payload.new.print_status);
+            }
           }
         }
       )
@@ -141,12 +151,18 @@ export default function ExactCustomerPrintStudio() {
     const pollInterval = setInterval(async () => {
       const { data } = await supabase
         .from('orders')
-        .select('print_status')
+        .select('payment_status, print_status')
         .eq('id', placedOrder.id)
         .single();
 
-      if (data && data.print_status && data.print_status !== printStatus) {
-        setPrintStatus(data.print_status);
+      if (data) {
+        if (data.payment_status === 'paid' && checkoutStep !== 'success') {
+          setCheckoutStep('success');
+          setIsWaitingShopApproval(false);
+        }
+        if (data.print_status && data.print_status !== printStatus) {
+          setPrintStatus(data.print_status);
+        }
       }
     }, 1000);
 
@@ -154,7 +170,7 @@ export default function ExactCustomerPrintStudio() {
       supabase.removeChannel(channel);
       clearInterval(pollInterval);
     };
-  }, [placedOrder?.id, printStatus]);
+  }, [placedOrder?.id, printStatus, checkoutStep]);
 
   const handleFilesSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -224,7 +240,7 @@ export default function ExactCustomerPrintStudio() {
   );
 
   // =========================================================================
-  // CANVAS PREVIEW RENDERER (Aspect-Ratio Lock)
+  // CANVAS PREVIEW RENDERER
   // =========================================================================
   useEffect(() => {
     const canvas = previewCanvasRef.current;
@@ -413,6 +429,7 @@ export default function ExactCustomerPrintStudio() {
     return pdf.output('blob');
   };
 
+  // 1. Confirm & Go to Intermediate Payment Screen
   const handleConfirmAndPay = async () => {
     if (!isShopOnline) {
       alert('Shop printer counter is offline. Please wait until connection is restored.');
@@ -452,8 +469,8 @@ export default function ExactCustomerPrintStudio() {
         pages: totalPreviewSheets,
         copies: copies,
         amount: totalCost,
-        payment_status: 'paid',
-        print_status: 'in_queue',
+        payment_status: 'pending',              // Held pending approval
+        print_status: 'waiting_approval',       // Waiting for merchant prompt
         print_type: colorMode,
         sided_type: sideMode,
       };
@@ -479,12 +496,32 @@ export default function ExactCustomerPrintStudio() {
       }
 
       setPlacedOrder(insertedOrder);
-      setPrintStatus('in_queue');
+      setPrintStatus('waiting_approval');
+      setCheckoutStep('payment'); // Move to payment screen
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err: any) {
-      alert('Order failed: ' + err.message);
+      alert('Order generation failed: ' + err.message);
     } finally {
       setPaying(false);
+    }
+  };
+
+  // 2. Customer clicks "I Have Paid"
+  const handleCustomerIHavePaid = async () => {
+    if (!placedOrder) return;
+    setIsWaitingShopApproval(true);
+
+    try {
+      // Signal to database that customer has initiated payment & is waiting for PC approval
+      await supabase
+        .from('orders')
+        .update({
+          payment_status: 'awaiting_confirmation',
+          print_status: 'waiting_approval',
+        })
+        .eq('id', placedOrder.id);
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -520,34 +557,33 @@ export default function ExactCustomerPrintStudio() {
   const isCompleted = printStatus === 'completed' || printStatus === 'printed';
   const isPrinting = printStatus === 'printing' || printStatus === 'processing';
 
-  // Show blur only when offline AND popup hasn't been dismissed yet
-  const shouldBlur = !isShopOnline && !isPopupDismissed;
+  // Dynamic UPI String Generator
+  const shopUpi = shop.upi_id || '9826000000@ybl';
+  const encodedShopName = encodeURIComponent(shopTitle);
+  const upiDeepLink = `upi://pay?pa=${shopUpi}&pn=${encodedShopName}&am=${totalCost.toFixed(2)}&cu=INR&tn=Print%20Order`;
+  const upiQrImageSrc = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiDeepLink)}`;
+
+  const shouldBlur = !isShopOnline && !isPopupDismissed && checkoutStep === 'upload';
 
   return (
     <div className="relative min-h-screen bg-[#060813] text-slate-200 font-sans selection:bg-indigo-600 selection:text-white pb-16">
       
-      {/* ========================================================================= */}
-      {/* OFFLINE POPUP MODAL (Dismissible with OK Button to Allow Page Access)     */}
-      {/* ========================================================================= */}
-      {!isShopOnline && !isPopupDismissed && (
+      {/* OFFLINE MODAL */}
+      {!isShopOnline && !isPopupDismissed && checkoutStep === 'upload' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-md p-4 animate-in fade-in duration-300">
           <div className="bg-[#0b1021] border border-rose-500/40 max-w-md w-full p-7 sm:p-8 rounded-3xl shadow-2xl text-center space-y-4">
             <div className="w-16 h-16 mx-auto rounded-3xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-3xl shadow-lg shadow-rose-500/10">
               🖨️
             </div>
-
             <div className="space-y-1">
               <span className="text-[10px] font-bold text-rose-400 uppercase tracking-widest bg-rose-500/10 px-3 py-1 rounded-full border border-rose-500/20">
                 Counter System Offline
               </span>
-              <h2 className="text-2xl font-black text-white pt-2">
-                Shop is Offline
-              </h2>
+              <h2 className="text-2xl font-black text-white pt-2">Shop is Offline</h2>
               <p className="text-xs text-slate-300 leading-relaxed pt-1">
                 The print counter computer at <b className="text-indigo-400">{shopTitle}</b> is currently disconnected from the server.
               </p>
             </div>
-
             <div className="bg-[#070b18] border border-slate-800/90 rounded-2xl p-4 text-left space-y-1.5">
               <div className="flex items-center gap-2 text-xs text-amber-400 font-medium">
                 <span>ℹ️</span>
@@ -557,8 +593,6 @@ export default function ExactCustomerPrintStudio() {
                 Feel free to upload your documents, adjust rotation, copies and layout now. The payment button will unlock as soon as the printer comes online.
               </p>
             </div>
-
-            {/* OK / Understood Button */}
             <button
               type="button"
               onClick={() => setIsPopupDismissed(true)}
@@ -570,7 +604,7 @@ export default function ExactCustomerPrintStudio() {
         </div>
       )}
 
-      {/* Main Page Layout (Blurs only when initial popup is visible) */}
+      {/* Main Layout */}
       <div className={shouldBlur ? 'pointer-events-none select-none filter blur-[3px] transition-all duration-300' : ''}>
         
         {/* Top Header */}
@@ -583,7 +617,7 @@ export default function ExactCustomerPrintStudio() {
               <h1 className="font-bold text-sm text-white leading-tight">{shopTitle}</h1>
               <p className="text-[10px] text-emerald-400 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
-                Secure Privacy Print Engine
+                Instant Print & Soundbox Counter
               </p>
             </div>
           </div>
@@ -596,15 +630,153 @@ export default function ExactCustomerPrintStudio() {
               </span>
             ) : (
               <div className="text-[11px] text-slate-400 font-mono bg-slate-900 px-3 py-1 rounded-full border border-slate-800">
-                Encrypted Spool
+                Counter Online
               </div>
             )}
           </div>
         </header>
 
-        {/* Main Form */}
+        {/* Main Content Area */}
         <main className="max-w-3xl mx-auto px-4 pt-6">
-          {placedOrder ? (
+
+          {/* ========================================================================= */}
+          {/* STEP 2: INTERMEDIARY PAYMENT SCREEN WITH UPI / CASH AND LIVE APPROVAL     */}
+          {/* ========================================================================= */}
+          {checkoutStep === 'payment' && placedOrder && (
+            <div className="bg-[#0b1021] border border-slate-800/90 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 text-center animate-in fade-in zoom-in-95 duration-200">
+              
+              <div className="space-y-1">
+                <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/20">
+                  Step 2 of 2 • Counter Payment
+                </span>
+                <h2 className="text-2xl font-black text-white tracking-tight pt-1">
+                  Complete Payment
+                </h2>
+                <p className="text-xs text-slate-400">
+                  Pay directly to <b className="text-white">{shopTitle}</b>. Once confirmed by shopkeeper, printing starts automatically.
+                </p>
+              </div>
+
+              {/* Order Summary Pill */}
+              <div className="bg-[#070b18] border border-slate-800/90 rounded-2xl p-4 text-xs font-mono max-w-sm mx-auto flex justify-between items-center">
+                <div className="text-left">
+                  <span className="text-slate-500 text-[10px] block font-sans uppercase">Order ID</span>
+                  <span className="text-indigo-400 font-bold">#STP-{placedOrder.id.substring(0, 8).toUpperCase()}</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-slate-500 text-[10px] block font-sans uppercase">Total Amount</span>
+                  <span className="text-emerald-400 font-bold text-base">₹{placedOrder.amount}</span>
+                </div>
+              </div>
+
+              {/* Payment Method Switcher (UPI / CASH) */}
+              <div className="max-w-sm mx-auto grid grid-cols-2 gap-2 bg-[#070b18] p-1.5 rounded-2xl border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('upi')}
+                  className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    paymentMethod === 'upi'
+                      ? 'bg-indigo-600 text-white shadow-lg'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <span>📱</span>
+                  <span>Pay with UPI</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('cash')}
+                  className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    paymentMethod === 'cash'
+                      ? 'bg-emerald-600 text-white shadow-lg'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <span>💵</span>
+                  <span>Pay with Cash</span>
+                </button>
+              </div>
+
+              {/* UPI QR & APP LAUNCH SECTION */}
+              {paymentMethod === 'upi' ? (
+                <div className="space-y-4 max-w-sm mx-auto">
+                  <div className="bg-white rounded-3xl p-4 shadow-xl text-slate-900 space-y-2 inline-block">
+                    <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider block">
+                      Scan with GPay / PhonePe / Paytm
+                    </span>
+                    <img
+                      src={upiQrImageSrc}
+                      alt="Shop Counter UPI QR"
+                      className="w-48 h-48 mx-auto object-contain"
+                    />
+                    <span className="text-[10px] font-mono text-slate-500 block truncate max-w-[200px] mx-auto">
+                      UPI: {shopUpi}
+                    </span>
+                  </div>
+
+                  <div>
+                    <a
+                      href={upiDeepLink}
+                      className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <span>🚀</span>
+                      <span>Open Any UPI App (₹{placedOrder.amount})</span>
+                    </a>
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Tap above if you are browsing from your smartphone.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                /* CASH SECTION */
+                <div className="bg-[#070b18] border border-slate-800 rounded-2xl p-6 max-w-sm mx-auto space-y-3">
+                  <div className="text-3xl">💵</div>
+                  <h3 className="text-sm font-bold text-white">Cash Counter Payment</h3>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Please pay <b className="text-emerald-400">₹{placedOrder.amount}</b> in cash directly to the shopkeeper at the counter.
+                  </p>
+                </div>
+              )}
+
+              {/* I HAVE PAID / CONFIRMATION BUTTON & WAITING OVERLAY */}
+              <div className="max-w-sm mx-auto pt-2 space-y-3">
+                {isWaitingShopApproval ? (
+                  <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 text-center space-y-2 animate-pulse">
+                    <div className="flex items-center justify-center gap-2 text-amber-400 font-bold text-xs uppercase tracking-wider">
+                      <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+                      <span>Waiting for Shopkeeper Confirmation</span>
+                    </div>
+                    <p className="text-[11px] text-slate-300">
+                      Approval alert sent to counter PC! As soon as shopkeeper confirms, your document will start printing automatically.
+                    </p>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleCustomerIHavePaid}
+                    className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-black text-sm uppercase tracking-wider rounded-2xl transition-all shadow-xl shadow-emerald-600/30 cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <span>✓</span>
+                    <span>I HAVE PAID (NOTIFY COUNTER)</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setCheckoutStep('upload')}
+                  className="text-[11px] text-slate-500 hover:text-slate-300 font-medium cursor-pointer"
+                >
+                  ← Cancel & Edit Settings
+                </button>
+              </div>
+
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* STEP 3: PAYMENT CONFIRMED / LIVE PRINTING STREAM                          */}
+          {/* ========================================================================= */}
+          {checkoutStep === 'success' && placedOrder && (
             <div className="bg-[#0b1021] border border-slate-800/90 rounded-3xl p-6 sm:p-10 shadow-2xl space-y-6 text-center animate-in fade-in zoom-in-95 duration-200">
               <div className="w-16 h-16 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-3xl flex items-center justify-center mx-auto text-3xl shadow-lg shadow-emerald-500/10">
                 ✓
@@ -612,10 +784,10 @@ export default function ExactCustomerPrintStudio() {
 
               <div className="space-y-1">
                 <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
-                  Payment Confirmed
+                  Payment Confirmed by Counter
                 </span>
                 <h2 className="text-2xl font-black text-white tracking-tight pt-2">
-                  Payment Successful!
+                  Payment Accepted!
                 </h2>
                 <p className="text-xs text-slate-400">
                   Your print job has been accepted and dispatched to {shopTitle}&apos;s printer.
@@ -630,7 +802,7 @@ export default function ExactCustomerPrintStudio() {
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-slate-500 font-sans">Amount Paid:</span>
+                  <span className="text-slate-500 font-sans">Amount Received:</span>
                   <span className="font-bold text-emerald-400">₹{placedOrder.amount}</span>
                 </div>
                 <div className="flex justify-between items-center">
@@ -652,7 +824,7 @@ export default function ExactCustomerPrintStudio() {
                     </span>
                   ) : (
                     <span className="font-mono text-xs font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-lg">
-                      ⏳ IN QUEUE (WAITING)
+                      ⏳ IN QUEUE (SPOOLING)
                     </span>
                   )}
                 </div>
@@ -686,13 +858,20 @@ export default function ExactCustomerPrintStudio() {
                 onClick={() => {
                   setPlacedOrder(null);
                   setFiles([]);
+                  setCheckoutStep('upload');
+                  setIsWaitingShopApproval(false);
                 }}
                 className="px-6 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-all cursor-pointer"
               >
                 Print Another Document
               </button>
             </div>
-          ) : (
+          )}
+
+          {/* ========================================================================= */}
+          {/* STEP 1: DOCUMENT UPLOAD & SETTINGS STUDIO                                */}
+          {/* ========================================================================= */}
+          {checkoutStep === 'upload' && (
             <div className="space-y-6">
               <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-5 shadow-2xl space-y-4">
                 <h2 className="text-center text-xs font-bold text-slate-300 uppercase tracking-wider">
@@ -840,7 +1019,6 @@ export default function ExactCustomerPrintStudio() {
                   </div>
                 </div>
 
-                {/* SIDES (Auto-Faded & Disabled when totalPages <= 1) */}
                 <div className="space-y-1">
                   <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
                     Printing Side
@@ -999,9 +1177,6 @@ export default function ExactCustomerPrintStudio() {
                   </div>
                 </div>
 
-                {/* ========================================================================= */}
-                {/* DYNAMIC CONFIRM & PAY BUTTON (Locks & Shows Offline State when PC is down)*/}
-                {/* ========================================================================= */}
                 {!isShopOnline ? (
                   <button
                     type="button"
@@ -1018,12 +1193,13 @@ export default function ExactCustomerPrintStudio() {
                     onClick={handleConfirmAndPay}
                     className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-bold text-xs tracking-wider rounded-xl transition-all shadow-lg cursor-pointer"
                   >
-                    {paying ? 'Rendering & Spooling to Printer...' : 'Confirm and Pay'}
+                    {paying ? 'Rendering & Preparing Payment...' : 'Proceed to Payment (₹' + totalCost.toFixed(2) + ')'}
                   </button>
                 )}
               </div>
             </div>
           )}
+
         </main>
       </div>
     </div>
