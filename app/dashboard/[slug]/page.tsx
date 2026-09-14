@@ -19,7 +19,6 @@ export default function VashuExactMerchantDashboard() {
   const [loading, setLoading] = useState(true);
   const [baseUrl, setBaseUrl] = useState('https://scantoprint.in');
 
-  // Pricing State
   const [pricing, setPricing] = useState({
     bwSingle: 2,
     bwDouble: 3,
@@ -35,7 +34,6 @@ export default function VashuExactMerchantDashboard() {
     }
   }, []);
 
-  // Set Dynamic Browser Tab Title based on Shop Name
   useEffect(() => {
     if (shop) {
       const name = shop.business_name || shop.name || 'Store';
@@ -191,17 +189,14 @@ export default function VashuExactMerchantDashboard() {
     );
   }
 
-  // 1. Connection check
   const isConnected = Boolean(
     shop.is_online &&
     shop.last_seen &&
     (Date.now() - new Date(shop.last_seen).getTime()) / 1000 < 25
   );
 
-  // 2. Active status check
   const isAgentActive = isConnected && shop.agent_status === 'active' && !shop.is_paused;
 
-  // Subscription calculation
   const subEnd = shop?.subscription_end ? new Date(shop.subscription_end) : new Date();
   const isExpired = subEnd.getTime() < Date.now();
   const daysRemaining = isExpired
@@ -209,7 +204,6 @@ export default function VashuExactMerchantDashboard() {
     : Math.ceil((subEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
   const planType = (shop?.plan_type || 'trial').toUpperCase();
 
-  // Pages Left Calculation for Standard/Trial plans
   const totalPageLimit = Number(shop?.page_limit || 500);
   const printedPagesCount = Number(shop?.monthly_pages_printed || 0);
   const pagesRemaining = Math.max(0, totalPageLimit - printedPagesCount);
@@ -317,7 +311,6 @@ export default function VashuExactMerchantDashboard() {
             <span>Download PC Package (.zip)</span>
           </button>
 
-          {/* 3-STATE DYNAMIC STATUS BADGE */}
           {!isConnected ? (
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold font-mono bg-rose-500/10 text-rose-400 border border-rose-500/20 shadow-sm">
               <span className="w-2 h-2 rounded-full bg-rose-500"></span>
@@ -374,7 +367,6 @@ export default function VashuExactMerchantDashboard() {
         </div>
       </header>
 
-      {/* Subscription Expired Alert Banner */}
       {isExpired && (
         <div className="bg-rose-950/60 border-b border-rose-500/30 px-6 py-2.5 text-center text-xs text-rose-300 flex items-center justify-center gap-2 no-print">
           <span>⚠️</span>
@@ -385,8 +377,6 @@ export default function VashuExactMerchantDashboard() {
       )}
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 space-y-5">
-        
-        {/* Metric Cards Row */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 no-print">
           <div className="bg-[#0b1021] border border-slate-800/90 rounded-xl p-4">
             <span className="text-[11px] text-slate-400 uppercase tracking-wider block font-medium">Today&apos;s Revenue</span>
@@ -411,9 +401,7 @@ export default function VashuExactMerchantDashboard() {
           </div>
         </div>
 
-        {/* ========================================================================= */}
-        {/* ACTIVE SUBSCRIPTION, VALIDITY & DYNAMIC REMAINING PAGES BANNER            */}
-        {/* ========================================================================= */}
+        {/* Subscription Banner */}
         <div className="bg-gradient-to-r from-[#0b1021] to-[#0e1626] border border-indigo-500/30 rounded-2xl p-5 shadow-xl flex flex-wrap items-center justify-between gap-4 no-print">
           <div className="flex items-center gap-3.5">
             <div className="w-11 h-11 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-xl text-indigo-400">
@@ -431,7 +419,6 @@ export default function VashuExactMerchantDashboard() {
                 </span>
               </div>
               
-              {/* Dynamic Pages Left logic */}
               <div className="text-[11px] text-slate-400 mt-0.5 flex flex-wrap items-center gap-1.5">
                 <span>Valid until: <strong className="text-slate-200">{subEnd.toLocaleDateString()}</strong></span>
                 <span>•</span>
@@ -547,7 +534,7 @@ export default function VashuExactMerchantDashboard() {
           </div>
         )}
 
-        {/* TAB 2: PRICING RATES */}
+        {/* TAB 2: PRICING */}
         {activeTab === 'pricing' && (
           <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-6 max-w-xl mx-auto shadow-xl space-y-4 no-print">
             <div>
@@ -613,7 +600,7 @@ export default function VashuExactMerchantDashboard() {
           </div>
         )}
 
-        {/* TAB 3: STORE STANDEE */}
+        {/* TAB 3: STORE STANDEE WITH STP BRAND BADGE */}
         {activeTab === 'standee' && (
           <div className="flex flex-col items-center justify-center pt-2 space-y-4">
             <div id="printable-standee-container" className="w-full flex justify-center">
@@ -627,7 +614,7 @@ export default function VashuExactMerchantDashboard() {
               >
                 <div className="pt-6 pb-4 px-4 space-y-2">
                   <div className="w-12 h-12 mx-auto rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center font-black text-white text-xs tracking-wider border border-white/20">
-                    STP
+                    {shopInitial}
                   </div>
                   <div className="text-[9px] uppercase tracking-widest text-indigo-200/90 font-bold">
                     SCANTOPRINT PARTNER STORE
@@ -654,11 +641,19 @@ export default function VashuExactMerchantDashboard() {
                   </p>
                 </div>
 
+                {/* Footer with Brand SVG Logo Badge */}
                 <div className="py-4 px-3 space-y-1">
                   <div className="text-[9px] uppercase tracking-wider text-slate-400 font-semibold">
                     POWERED & SECURED BY
                   </div>
-                  <div className="text-sm font-bold text-white tracking-wider">scantoprint.in</div>
+                  <div className="flex items-center justify-center gap-1.5 pt-0.5">
+                    <img
+                      src="/icon.svg"
+                      alt="ScanToPrint Logo"
+                      className="w-4 h-4 rounded object-contain"
+                    />
+                    <span className="text-sm font-bold text-white tracking-wider">scantoprint.in</span>
+                  </div>
                   <div className="text-[10px] font-mono text-indigo-300/80">{displayPrintLink}</div>
                 </div>
               </div>

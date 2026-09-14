@@ -7,7 +7,6 @@ export default function HomePage() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [selectedPlan, setSelectedPlan] = useState<'trial' | 'standard' | 'premium'>('standard');
 
-  // Dynamic Browser Tab Title for Home Page
   useEffect(() => {
     document.title = 'ScanToPrint • Instant Zero-Touch Printing';
   }, []);
@@ -25,15 +24,16 @@ export default function HomePage() {
       {/* Top Navbar */}
       <header className="sticky top-0 z-50 backdrop-blur-xl bg-[#070b14]/80 border-b border-slate-800/80 px-6 sm:px-12 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-xl bg-indigo-600 flex items-center justify-center font-black text-lg text-white shadow-lg shadow-indigo-600/30">
-            S
-          </div>
+          <img
+            src="/icon.svg"
+            alt="ScanToPrint Logo"
+            className="h-9 w-9 rounded-xl object-contain shadow-lg shadow-indigo-600/30"
+          />
           <span className="font-extrabold text-base tracking-tight text-white">
             ScanToPrint<span className="text-indigo-400">.in</span>
           </span>
         </div>
 
-        {/* All links identical style */}
         <nav className="hidden md:flex items-center gap-8 text-xs font-medium text-slate-400">
           <a href="#workflow" className="hover:text-white transition-colors">How It Works</a>
           <a href="#features" className="hover:text-white transition-colors">Features</a>
@@ -66,7 +66,6 @@ export default function HomePage() {
           Empower photocopy and print shop owners with zero-touch order processing. Instant UPI payments, and local desktop print auto-sync on scantoprint.in.
         </p>
 
-        {/* Hero CTA with Smooth Scroll */}
         <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
           <button
             onClick={scrollToPlans}
@@ -138,7 +137,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 2. Smart Cloud Features & Automation */}
+      {/* 2. Smart Cloud Features */}
       <section id="features" className="max-w-6xl mx-auto px-6 py-16 space-y-8">
         <div className="text-center space-y-2">
           <h2 className="text-2xl sm:text-3xl font-black text-white">Smart Cloud Features & Automation</h2>
@@ -154,7 +153,7 @@ export default function HomePage() {
             </div>
             <h3 className="text-sm font-bold text-white">Super Admin Dashboard</h3>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Track aggregated monthly recurring revenues, active vs inactive shops, and easily onboard new print shops.
+              Track SaaS subscription metrics, monitor online fleet nodes, and manage merchant registrations.
             </p>
           </div>
 
@@ -164,7 +163,7 @@ export default function HomePage() {
             </div>
             <h3 className="text-sm font-bold text-white">Individual Shop Portals</h3>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Sub-admin view for store owners featuring live orders tables, lifetime revenue stats, ratings, and downloadable store QR codes.
+              Merchant dashboard featuring live telemetry, remaining page quota counters, pricing controls, and downloadable standees.
             </p>
           </div>
 
@@ -193,7 +192,6 @@ export default function HomePage() {
             Choose the plan that fits your counter volume. Start risk-free with our 7-day full access trial.
           </p>
 
-          {/* Monthly / Yearly Billing Toggle */}
           <div className="pt-4 flex items-center justify-center gap-3">
             <span className={`text-xs font-semibold ${billingCycle === 'monthly' ? 'text-white' : 'text-slate-400'}`}>
               Monthly
@@ -218,10 +216,8 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Pricing Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
-          
-          {/* Card 1: 7-Day Free Trial */}
+          {/* Card 1 */}
           <div
             onClick={() => setSelectedPlan('trial')}
             className={`rounded-3xl p-7 flex flex-col justify-between transition-all duration-300 cursor-pointer shadow-xl ${
@@ -242,17 +238,14 @@ export default function HomePage() {
                   </span>
                 )}
               </div>
-
               <div>
                 <h3 className="text-xl font-bold text-white">7-Day Free Trial</h3>
                 <p className="text-xs text-slate-400 mt-1">Full access to experience automated counter printing.</p>
               </div>
-
               <div className="pt-2">
                 <span className="text-3xl font-black text-white">₹0</span>
                 <span className="text-xs text-slate-400"> / 7 days</span>
               </div>
-
               <ul className="space-y-2.5 pt-4 text-xs text-slate-300 border-t border-slate-800/80">
                 <li className="flex items-center gap-2">
                   <span className="text-emerald-400">✓</span>
@@ -272,7 +265,6 @@ export default function HomePage() {
                 </li>
               </ul>
             </div>
-
             <div className="pt-6">
               <Link
                 href={`/register?plan=trial&cycle=${billingCycle}`}
@@ -287,7 +279,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Card 2: Standard Plan */}
+          {/* Card 2 */}
           <div
             onClick={() => setSelectedPlan('standard')}
             className={`rounded-3xl p-7 flex flex-col justify-between transition-all duration-300 cursor-pointer relative shadow-xl ${
@@ -299,7 +291,6 @@ export default function HomePage() {
             <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-600 text-white text-[10px] uppercase font-bold tracking-widest px-3 py-0.5 rounded-full shadow-md">
               Most Popular
             </div>
-
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider bg-indigo-950/60 px-2.5 py-1 rounded-lg border border-indigo-800/50">
@@ -312,12 +303,10 @@ export default function HomePage() {
                   </span>
                 )}
               </div>
-
               <div>
                 <h3 className="text-xl font-bold text-white">Standard Plan</h3>
                 <p className="text-xs text-slate-400 mt-1">Perfect for steady daily photocopy & document counters.</p>
               </div>
-
               <div className="pt-2">
                 <span className="text-3xl font-black text-indigo-400">
                   {billingCycle === 'monthly' ? '₹149' : '₹1,499'}
@@ -326,7 +315,6 @@ export default function HomePage() {
                   {billingCycle === 'monthly' ? ' / 28 days' : ' / year'}
                 </span>
               </div>
-
               <ul className="space-y-2.5 pt-4 text-xs text-slate-300 border-t border-slate-800/80">
                 <li className="flex items-center gap-2">
                   <span className="text-emerald-400">✓</span>
@@ -346,7 +334,6 @@ export default function HomePage() {
                 </li>
               </ul>
             </div>
-
             <div className="pt-6">
               <Link
                 href={`/register?plan=standard&cycle=${billingCycle}`}
@@ -361,7 +348,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Card 3: Premium Plan */}
+          {/* Card 3 */}
           <div
             onClick={() => setSelectedPlan('premium')}
             className={`rounded-3xl p-7 flex flex-col justify-between transition-all duration-300 cursor-pointer shadow-xl ${
@@ -382,12 +369,10 @@ export default function HomePage() {
                   </span>
                 )}
               </div>
-
               <div>
                 <h3 className="text-xl font-bold text-white">Premium Plan</h3>
                 <p className="text-xs text-slate-400 mt-1">Unlimited printing capacity for busy universities & cafes.</p>
               </div>
-
               <div className="pt-2">
                 <span className="text-3xl font-black text-amber-400">
                   {billingCycle === 'monthly' ? '₹249' : '₹2,199'}
@@ -396,7 +381,6 @@ export default function HomePage() {
                   {billingCycle === 'monthly' ? ' / 28 days' : ' / year'}
                 </span>
               </div>
-
               <ul className="space-y-2.5 pt-4 text-xs text-slate-300 border-t border-slate-800/80">
                 <li className="flex items-center gap-2">
                   <span className="text-emerald-400">✓</span>
@@ -416,7 +400,6 @@ export default function HomePage() {
                 </li>
               </ul>
             </div>
-
             <div className="pt-6">
               <Link
                 href={`/register?plan=premium&cycle=${billingCycle}`}
@@ -433,7 +416,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 4. Customer Reviews */}
+      {/* 4. Reviews */}
       <section id="testimonials" className="max-w-6xl mx-auto px-6 py-16 space-y-8">
         <div className="text-center space-y-2">
           <h2 className="text-2xl sm:text-3xl font-black text-white">Customer Reviews & Testimonials</h2>
@@ -503,7 +486,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Footer */}
       <footer className="border-t border-slate-800/80 py-8 px-6 text-center text-xs text-slate-500">
         © 2026 ScanToPrint.in. All rights reserved. Automated Cloud Printing System.
       </footer>
