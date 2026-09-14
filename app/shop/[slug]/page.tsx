@@ -14,7 +14,7 @@ interface UploadedDoc {
   id: string;
   name: string;
   url: string;
-  file: File;
+  file?: File;
   pages: number;
   imgObj?: HTMLImageElement;
 }
@@ -28,6 +28,7 @@ export default function ExactCustomerPrintStudio() {
 
   // Files
   const [files, setFiles] = useState<UploadedDoc[]>([]);
+  const [isProcessingPdf, setIsProcessingPdf] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -56,7 +57,7 @@ export default function ExactCustomerPrintStudio() {
   // Popup Dismiss State
   const [isPopupDismissed, setIsPopupDismissed] = useState<boolean>(false);
 
-  // Total uploaded files count
+  // Total pages count
   const totalPages = files.length;
 
   useEffect(() => {
@@ -168,31 +169,110 @@ export default function ExactCustomerPrintStudio() {
     };
   }, [placedOrder?.id, printStatus, checkoutStep]);
 
-  const handleFilesSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const selectedFiles = Array.from(e.target.files);
-      const newDocs: UploadedDoc[] = [];
+  // Dynamically load PDF.js script
+  const loadPdfJs = async (): Promise<any> => {
+    if ((window as any).pdfjsLib) return (window as any).pdfjsLib;
 
-      for (const f of selectedFiles) {
-        const objUrl = URL.createObjectURL(f);
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      script.onload = () => {
+        const lib = (window as any).pdfjsLib;
+        if (lib) {
+          lib.GlobalWorkerOptions.workerSrc =
+            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+          resolve(lib);
+        } else {
+          reject(new Error('PDF.js library failed to initialize'));
+        }
+      };
+      script.onerror = () => reject(new Error('Failed to load PDF.js script'));
+      document.body.appendChild(script);
+    });
+  };
+
+  // Convert PDF Pages to Image Objects for Crisp Canvas Rendering
+  const convertPdfToPages = async (file: File): Promise<UploadedDoc[]> => {
+    const pdfjs = await loadPdfJs();
+    const arrayBuffer = await file.arrayBuffer();
+    const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
+    const pdfDoc = await loadingTask.promise;
+    const numPages = pdfDoc.numPages;
+
+    const parsedPages: UploadedDoc[] = [];
+
+    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+      const page = await pdfDoc.getPage(pageNum);
+      const viewport = page.getViewport({ scale: 1.5 });
+
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const ctx = canvas.getContext('2d');
+
+      if (ctx) {
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        const pageDataUrl = canvas.toDataURL('image/jpeg', 0.92);
+
         const img = new Image();
-        img.src = objUrl;
+        img.src = pageDataUrl;
         await new Promise((res) => {
           img.onload = () => res(true);
           img.onerror = () => res(true);
         });
 
-        newDocs.push({
+        parsedPages.push({
           id: Math.random().toString(36).substring(2, 9),
-          name: f.name,
-          url: objUrl,
-          file: f,
+          name: `${file.name} (P.${pageNum}/${numPages})`,
+          url: pageDataUrl,
+          file: file,
           pages: 1,
           imgObj: img,
         });
       }
+    }
 
-      setFiles((prev) => [...prev, ...newDocs]);
+    return parsedPages;
+  };
+
+  const handleFilesSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const selectedFiles = Array.from(e.target.files);
+      setIsProcessingPdf(true);
+      const newDocs: UploadedDoc[] = [];
+
+      try {
+        for (const f of selectedFiles) {
+          if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) {
+            const pdfPages = await convertPdfToPages(f);
+            newDocs.push(...pdfPages);
+          } else {
+            const objUrl = URL.createObjectURL(f);
+            const img = new Image();
+            img.src = objUrl;
+            await new Promise((res) => {
+              img.onload = () => res(true);
+              img.onerror = () => res(true);
+            });
+
+            newDocs.push({
+              id: Math.random().toString(36).substring(2, 9),
+              name: f.name,
+              url: objUrl,
+              file: f,
+              pages: 1,
+              imgObj: img,
+            });
+          }
+        }
+
+        setFiles((prev) => [...prev, ...newDocs]);
+      } catch (err: any) {
+        alert('Error processing file: ' + err.message);
+      } finally {
+        setIsProcessingPdf(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -421,7 +501,7 @@ export default function ExactCustomerPrintStudio() {
     return pdf.output('blob');
   };
 
-  // 1. Confirm & Move to Payment Screen (Status: draft_payment, PC par alert NAI aayega)
+  // 1. Confirm & Move to Payment Screen
   const handleConfirmAndPay = async () => {
     if (!isShopOnline) {
       alert('Shop printer counter is offline. Please wait until connection is restored.');
@@ -462,7 +542,7 @@ export default function ExactCustomerPrintStudio() {
         copies: copies,
         amount: totalCost,
         payment_status: 'pending',
-        print_status: 'draft_payment', // PC par alert trigger nahi hoga abhi
+        print_status: 'draft_payment',
         print_type: colorMode,
         sided_type: sideMode,
       };
@@ -498,7 +578,7 @@ export default function ExactCustomerPrintStudio() {
     }
   };
 
-  // 2. Customer clicks "I Have Paid" (AB PC par alert & popup jaayega!)
+  // 2. Customer clicks "I Have Paid"
   const handleCustomerIHavePaid = async () => {
     if (!placedOrder) return;
     setIsWaitingShopApproval(true);
@@ -508,7 +588,7 @@ export default function ExactCustomerPrintStudio() {
         .from('orders')
         .update({
           payment_status: 'awaiting_confirmation',
-          print_status: 'waiting_approval', // AB Agent ko trigger milega
+          print_status: 'waiting_approval',
         })
         .eq('id', placedOrder.id);
     } catch (e) {
@@ -606,7 +686,7 @@ export default function ExactCustomerPrintStudio() {
               <h1 className="font-bold text-sm text-white leading-tight">{shopTitle}</h1>
               <p className="text-[10px] text-emerald-400 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
-                Instant Print & Soundbox Counter
+                Instant Print Counter
               </p>
             </div>
           </div>
@@ -722,7 +802,6 @@ export default function ExactCustomerPrintStudio() {
                   </div>
                 </div>
               ) : (
-                /* Cash Section */
                 <div className="bg-[#070b18] border border-slate-800 rounded-2xl p-6 max-w-sm mx-auto space-y-3">
                   <div className="text-3xl">💵</div>
                   <h3 className="text-sm font-bold text-white">Cash Counter Payment</h3>
@@ -869,7 +948,7 @@ export default function ExactCustomerPrintStudio() {
                 </h2>
 
                 <div
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => !isProcessingPdf && fileInputRef.current?.click()}
                   className="border border-dashed border-slate-700 hover:border-indigo-500/80 rounded-xl p-6 text-center cursor-pointer bg-[#070b18]/60 transition-all"
                 >
                   <input
@@ -880,16 +959,27 @@ export default function ExactCustomerPrintStudio() {
                     className="hidden"
                     onChange={handleFilesSelect}
                   />
-                  <div className="text-2xl mb-1">📄</div>
-                  <div className="text-xs font-semibold text-white">Click to Upload Document / Image</div>
-                  <p className="text-[10px] text-slate-500 mt-0.5">Supports PDF, PNG, JPG, JPEG, WEBP</p>
+                  {isProcessingPdf ? (
+                    <div className="space-y-2 py-2">
+                      <div className="w-7 h-7 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                      <div className="text-xs font-semibold text-indigo-400">Processing PDF Pages...</div>
+                      <p className="text-[10px] text-slate-500">Generating live preview frames for every page</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="text-2xl mb-1">📄</div>
+                      <div className="text-xs font-semibold text-white">Click to Upload Document / Image</div>
+                      <p className="text-[10px] text-slate-500 mt-0.5">Supports Multi-page PDF, PNG, JPG, JPEG, WEBP</p>
+                    </>
+                  )}
                 </div>
 
                 <div className="text-center">
                   <button
                     type="button"
+                    disabled={isProcessingPdf}
                     onClick={() => fileInputRef.current?.click()}
-                    className="text-xs text-indigo-400 hover:text-indigo-300 font-medium py-1 px-3 rounded-lg hover:bg-indigo-500/10 transition-all inline-flex items-center gap-1 cursor-pointer"
+                    className="text-xs text-indigo-400 hover:text-indigo-300 font-medium py-1 px-3 rounded-lg hover:bg-indigo-500/10 transition-all inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
                   >
                     <span>+</span>
                     <span>Add Another File</span>
@@ -906,7 +996,6 @@ export default function ExactCustomerPrintStudio() {
                         <div className="flex items-center gap-2 truncate max-w-[85%]">
                           <span className="text-slate-400">📄</span>
                           <span className="text-slate-200 truncate">{f.name}</span>
-                          <span className="text-[10px] text-slate-500">({f.pages} p...)</span>
                         </div>
                         <button
                           type="button"
@@ -921,6 +1010,7 @@ export default function ExactCustomerPrintStudio() {
                 )}
               </div>
 
+              {/* LIVE PRINT PREVIEW */}
               <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-5 shadow-2xl space-y-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
@@ -952,9 +1042,9 @@ export default function ExactCustomerPrintStudio() {
                             type="button"
                             disabled={currentSheet <= 1}
                             onClick={() => setCurrentSheet((prev) => Math.max(1, prev - 1))}
-                            className="px-2 py-1 bg-[#070b18] hover:bg-slate-800 disabled:opacity-30 rounded border border-slate-800 text-[11px] cursor-pointer"
+                            className="px-2.5 py-1 bg-[#070b18] hover:bg-slate-800 disabled:opacity-30 rounded border border-slate-800 text-[11px] cursor-pointer"
                           >
-                            ← Prev
+                            ← Prev Page
                           </button>
                           <span>
                             Sheet {currentSheet} of {totalPreviewSheets}
@@ -963,9 +1053,9 @@ export default function ExactCustomerPrintStudio() {
                             type="button"
                             disabled={currentSheet >= totalPreviewSheets}
                             onClick={() => setCurrentSheet((prev) => Math.min(totalPreviewSheets, prev + 1))}
-                            className="px-2 py-1 bg-[#070b18] hover:bg-slate-800 disabled:opacity-30 rounded border border-slate-800 text-[11px] cursor-pointer"
+                            className="px-2.5 py-1 bg-[#070b18] hover:bg-slate-800 disabled:opacity-30 rounded border border-slate-800 text-[11px] cursor-pointer"
                           >
-                            Next →
+                            Next Page →
                           </button>
                         </div>
                       )}
@@ -974,6 +1064,7 @@ export default function ExactCustomerPrintStudio() {
                 </div>
               </div>
 
+              {/* PRINT SETTINGS & PAYMENT */}
               <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-5 shadow-2xl space-y-4">
                 <h2 className="text-center text-xs font-bold text-slate-300 uppercase tracking-wider">
                   Print Settings & Payment
@@ -1179,7 +1270,7 @@ export default function ExactCustomerPrintStudio() {
                 ) : (
                   <button
                     type="button"
-                    disabled={paying || files.length === 0}
+                    disabled={paying || files.length === 0 || isProcessingPdf}
                     onClick={handleConfirmAndPay}
                     className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-bold text-xs tracking-wider rounded-xl transition-all shadow-lg cursor-pointer"
                   >
@@ -1191,6 +1282,13 @@ export default function ExactCustomerPrintStudio() {
           )}
 
         </main>
+
+        {/* Footer with Brand SVG Logo */}
+        <footer className="mt-12 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
+          <span>Secured Cloud Spooling by</span>
+          <img src="/icon.svg" alt="ScanToPrint Logo" className="w-4 h-4 object-contain inline-block" />
+          <strong className="text-slate-400">scantoprint.in</strong>
+        </footer>
       </div>
     </div>
   );
