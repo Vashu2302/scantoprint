@@ -22,31 +22,29 @@ export default function AdminSuperDashboard() {
   const [authError, setAuthError] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Active View Tab: 'shops' | 'partners'
-  const [activeTab, setActiveTab] = useState<'shops' | 'partners'>('shops');
+  // Top Master Tab: 'shops' | 'agents'
+  const [adminView, setAdminView] = useState<'shops' | 'agents'>('shops');
 
-  // Shop, Partner & Platform Metrics
+  // Core Data
   const [shops, setShops] = useState<any[]>([]);
   const [partners, setPartners] = useState<any[]>([]);
-  const [orders, setOrders] = useState<any[]>([]);
+  const [payoutsHistory, setPayoutsHistory] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Partner Payout Requests State
+  // Partner Payout Requests
   const [pendingPayouts, setPendingPayouts] = useState<any[]>([]);
   const [payoutUtrMap, setPayoutUtrMap] = useState<{ [id: string]: string }>({});
   const [settlingPayoutId, setSettlingPayoutId] = useState<string | null>(null);
 
-  // Dynamic Admin UPI Manager
+  // Dynamic Settings
   const [adminUpi, setAdminUpi] = useState('');
   const [isSavingUpi, setIsSavingUpi] = useState(false);
   const [upiStatusMsg, setUpiStatusMsg] = useState('');
 
-  // Dynamic Google Drive Agent URL State
   const [agentDriveUrl, setAgentDriveUrl] = useState('');
   const [isSavingUrl, setIsSavingUrl] = useState(false);
   const [urlStatusMsg, setUrlStatusMsg] = useState('');
 
-  // Check login state on mount
   useEffect(() => {
     const sessionAuth = sessionStorage.getItem('stp_admin_auth');
     if (sessionAuth === 'true') {
@@ -90,7 +88,6 @@ export default function AdminSuperDashboard() {
     setInputPassword('');
   };
 
-  // Fetch shops, partners & orders
   const fetchAdminData = async () => {
     setLoading(true);
     const { data: shopsData } = await supabase
@@ -103,18 +100,17 @@ export default function AdminSuperDashboard() {
       .select('*')
       .order('created_at', { ascending: false });
 
-    const { data: ordersData } = await supabase
-      .from('orders')
+    const { data: allPayouts } = await supabase
+      .from('partner_payouts')
       .select('*')
       .order('created_at', { ascending: false });
 
     if (shopsData) setShops(shopsData);
     if (partnersData) setPartners(partnersData);
-    if (ordersData) setOrders(ordersData);
+    if (allPayouts) setPayoutsHistory(allPayouts);
     setLoading(false);
   };
 
-  // Fetch Pending Partner Payouts
   const fetchPendingPayouts = async () => {
     const { data: payoutsData } = await supabase
       .from('partner_payouts')
@@ -125,7 +121,6 @@ export default function AdminSuperDashboard() {
     if (payoutsData) setPendingPayouts(payoutsData);
   };
 
-  // Fetch platform settings (Admin UPI + Drive Link)
   const fetchPlatformSettings = async () => {
     try {
       const { data: upiData } = await supabase
@@ -157,7 +152,6 @@ export default function AdminSuperDashboard() {
     }
   };
 
-  // Save Admin UPI ID
   const handleSaveAdminUpi = async () => {
     if (!adminUpi.trim()) {
       alert('Please enter a valid UPI ID.');
@@ -186,7 +180,6 @@ export default function AdminSuperDashboard() {
     }
   };
 
-  // Save new Google Drive link
   const handleSaveAgentUrl = async () => {
     if (!agentDriveUrl.trim()) {
       alert('Please enter a valid URL.');
@@ -222,7 +215,7 @@ export default function AdminSuperDashboard() {
     }
   };
 
-  // UTR SUBSCRIPTION VERIFICATION ACTIONS
+  // UTR Shop Approval & Partner Commission Auto-Credit
   const handleApproveUtr = async (shop: any) => {
     if (!confirm(`Confirm payment received for "${shop.business_name || shop.name}" (UTR: ${shop.payment_utr})?`)) return;
 
@@ -240,7 +233,6 @@ export default function AdminSuperDashboard() {
       return;
     }
 
-    // Auto-Credit Commission to Partner
     if (shop.referred_by_code && !shop.commission_credited) {
       const plan = (shop.plan_type || 'standard').toLowerCase();
       const commission = plan === 'premium' ? 150 : 100;
@@ -308,7 +300,7 @@ export default function AdminSuperDashboard() {
     }
   };
 
-  // Settle Partner Payout Request
+  // Settle Payout
   const handleSettlePayout = async (payout: any) => {
     const utr = (payoutUtrMap[payout.id] || '').trim();
     if (utr.length < 4) {
@@ -331,6 +323,7 @@ export default function AdminSuperDashboard() {
       if (error) throw error;
 
       setPendingPayouts((prev) => prev.filter((p) => p.id !== payout.id));
+      fetchAdminData();
       alert(`✓ Payout of ₹${payout.amount} marked as paid to ${payout.partner_name}!`);
     } catch (err: any) {
       alert('Failed to settle payout: ' + err.message);
@@ -339,7 +332,6 @@ export default function AdminSuperDashboard() {
     }
   };
 
-  // Toggle Partner Active Status
   const handleTogglePartnerStatus = async (partner: any) => {
     const willActive = !partner.is_active;
     const { error } = await supabase
@@ -356,7 +348,6 @@ export default function AdminSuperDashboard() {
     }
   };
 
-  // Delete Partner
   const handleDeletePartner = async (partner: any) => {
     if (!confirm(`Delete partner "${partner.full_name}" (${partner.referral_code}) permanently?`)) return;
 
@@ -372,7 +363,6 @@ export default function AdminSuperDashboard() {
     }
   };
 
-  // Toggle Pause/Resume Subscription (Hard Lock)
   const handleToggleShopPause = async (shop: any) => {
     const willPause = !shop.is_paused;
     const confirmMsg = willPause
@@ -456,10 +446,10 @@ export default function AdminSuperDashboard() {
     );
   }
 
-  // =========================================================================
-  // REVENUE COMPUTATION
-  // =========================================================================
-  const getPlanCost = (planType?: string, billingCycle?: string, hasReferral?: boolean) => {
+  // ==========================================
+  // CALCULATIONS: SHOPS DOMAIN
+  // ==========================================
+  const getShopPlanCost = (planType?: string, billingCycle?: string, hasReferral?: boolean) => {
     const p = (planType || '').toLowerCase();
     const c = (billingCycle || '').toLowerCase();
     if (p === 'standard') {
@@ -484,7 +474,7 @@ export default function AdminSuperDashboard() {
 
   shops.forEach((s) => {
     const p = (s.plan_type || 'trial').toLowerCase();
-    const cost = getPlanCost(p, s.billing_cycle, Boolean(s.referred_by_code));
+    const cost = getShopPlanCost(p, s.billing_cycle, Boolean(s.referred_by_code));
 
     if (cost > 0 && (s.payment_utr || s.payment_verified)) {
       lifetimeSaaSFees += cost;
@@ -516,7 +506,27 @@ export default function AdminSuperDashboard() {
 
   const pendingUtrShops = shops.filter((s) => s.payment_utr && s.payment_verified !== true);
 
-  // Filters
+  // ==========================================
+  // CALCULATIONS: AGENTS DOMAIN
+  // ==========================================
+  let totalPaidToAgentsLifetime = 0;
+  let totalPaidToAgentsMonth = 0;
+
+  payoutsHistory.forEach((ph) => {
+    if (ph.status === 'paid') {
+      const amt = Number(ph.amount || 0);
+      totalPaidToAgentsLifetime += amt;
+
+      const paidDate = ph.paid_at ? new Date(ph.paid_at) : null;
+      if (paidDate && paidDate.getFullYear() === currentYear && paidDate.getMonth() === currentMonth) {
+        totalPaidToAgentsMonth += amt;
+      }
+    }
+  });
+
+  const totalShopsAddedByAgents = shops.filter((s) => Boolean(s.referred_by_code)).length;
+
+  // Filtered lists
   const filteredShops = shops.filter(
     (s) =>
       s.business_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -539,7 +549,7 @@ export default function AdminSuperDashboard() {
     <div className="min-h-screen bg-[#060813] text-slate-200 font-sans p-6 sm:p-8 space-y-6">
       <div className="max-w-7xl mx-auto space-y-6">
         
-        {/* Top Bar */}
+        {/* Top Header */}
         <header className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800/80 pb-5">
           <div>
             <div className="flex items-center gap-2">
@@ -549,7 +559,7 @@ export default function AdminSuperDashboard() {
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Live Fleet Control, Partner Agents Network, Subscription Verification & Telemetry
+              Live Fleet Control, Partner Agents Network & Subscription Verification
             </p>
           </div>
 
@@ -563,9 +573,9 @@ export default function AdminSuperDashboard() {
           </div>
         </header>
 
-        {/* 1. PENDING PARTNER PAYOUT REQUESTS ALERT BOX */}
+        {/* 1. PENDING PARTNER PAYOUT NOTIFICATION (WITH INSTANT SCAN QR) */}
         {pendingPayouts.length > 0 && (
-          <div className="bg-gradient-to-r from-indigo-950/60 via-[#0b1021] to-[#070b18] border-2 border-indigo-500/50 rounded-2xl p-5 shadow-2xl space-y-4 animate-in fade-in duration-300">
+          <div className="bg-gradient-to-r from-indigo-950/70 via-[#0b1021] to-[#070b18] border-2 border-indigo-500/50 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4 animate-in fade-in duration-300">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-indigo-400 text-xl">💸</span>
@@ -573,45 +583,70 @@ export default function AdminSuperDashboard() {
                   Partner UPI Payout Requests ({pendingPayouts.length} Pending)
                 </h2>
               </div>
-              <span className="text-[11px] text-indigo-300 font-sans">
-                Send commission via UPI app and enter settlement UTR below to confirm.
+              <span className="text-[11px] text-indigo-300 font-sans hidden sm:inline">
+                Scan QR directly with your PhonePe / GPay app to pay instantly!
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {pendingPayouts.map((p) => (
-                <div key={p.id} className="bg-[#070b18] border border-slate-800 rounded-xl p-4 space-y-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="font-bold text-white text-xs">{p.partner_name}</h3>
-                      <p className="text-[10px] text-slate-400">Target UPI:</p>
-                      <p className="text-xs font-mono font-bold text-emerald-400 select-all">{p.partner_upi}</p>
-                    </div>
-                    <span className="text-base font-black font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg">
-                      ₹{p.amount}
-                    </span>
-                  </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {pendingPayouts.map((p) => {
+                const partnerUpi = p.partner_upi;
+                const payAmount = p.amount;
+                const encodedName = encodeURIComponent(p.partner_name);
+                const payoutUpiUri = `upi://pay?pa=${partnerUpi}&pn=${encodedName}&am=${payAmount}&cu=INR`;
+                const payoutQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(payoutUpiUri)}`;
 
-                  <div className="space-y-1.5">
-                    <input
-                      type="text"
-                      placeholder="Enter 12-digit UTR from GPay/PhonePe"
-                      value={payoutUtrMap[p.id] || ''}
-                      onChange={(e) =>
-                        setPayoutUtrMap({ ...payoutUtrMap, [p.id]: e.target.value })
-                      }
-                      className="w-full bg-[#0b1021] border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white font-mono placeholder-slate-600 focus:outline-none focus:border-indigo-500"
-                    />
-                    <button
-                      onClick={() => handleSettlePayout(p)}
-                      disabled={settlingPayoutId === p.id}
-                      className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider rounded-lg transition-all shadow cursor-pointer"
-                    >
-                      {settlingPayoutId === p.id ? 'Settling...' : '✓ Mark Paid & Settle'}
-                    </button>
+                return (
+                  <div key={p.id} className="bg-[#070b18] border border-slate-800 rounded-2xl p-4 flex flex-col justify-between gap-3 shadow-lg">
+                    
+                    {/* Upper row: Details + Mini Scan QR */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Agent</span>
+                        <h3 className="font-bold text-white text-sm leading-tight">{p.partner_name}</h3>
+                        <p className="text-[11px] font-mono text-emerald-400 font-bold select-all">{partnerUpi}</p>
+                        <div className="pt-1">
+                          <span className="text-lg font-black font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-lg inline-block">
+                            ₹{payAmount}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Mini QR Code Box for Camera Scan */}
+                      <div className="bg-white p-1.5 rounded-xl shadow text-center shrink-0">
+                        <img
+                          src={payoutQrUrl}
+                          alt="Scan to Pay Partner"
+                          className="w-20 h-20 object-contain rounded-md"
+                        />
+                        <span className="text-[8px] font-bold text-slate-700 uppercase tracking-tight block pt-0.5">
+                          Scan to Pay
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Lower row: Enter UTR & Confirm */}
+                    <div className="space-y-2 pt-2 border-t border-slate-800/80">
+                      <input
+                        type="text"
+                        placeholder="Enter 12-digit UTR from GPay"
+                        value={payoutUtrMap[p.id] || ''}
+                        onChange={(e) =>
+                          setPayoutUtrMap({ ...payoutUtrMap, [p.id]: e.target.value })
+                        }
+                        className="w-full bg-[#0b1021] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono placeholder-slate-600 focus:outline-none focus:border-indigo-500"
+                      />
+                      <button
+                        onClick={() => handleSettlePayout(p)}
+                        disabled={settlingPayoutId === p.id}
+                        className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow cursor-pointer"
+                      >
+                        {settlingPayoutId === p.id ? 'Settling...' : '✓ Confirm & Mark Paid'}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -676,7 +711,7 @@ export default function AdminSuperDashboard() {
           </div>
         )}
 
-        {/* ROW: DYNAMIC ADMIN UPI & DRIVE LINK */}
+        {/* ROW: DYNAMIC ADMIN RECEIVER UPI & SPOOLER DRIVE LINK */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           
           {/* ADMIN RECEIVER UPI */}
@@ -715,7 +750,7 @@ export default function AdminSuperDashboard() {
             )}
           </div>
 
-          {/* GOOGLE DRIVE AGENT DOWNLOAD LINK */}
+          {/* SPOOLER PACKAGE URL */}
           <div className="bg-[#0b1021] border border-indigo-500/30 rounded-2xl p-5 shadow-xl space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
@@ -763,421 +798,301 @@ export default function AdminSuperDashboard() {
 
         </div>
 
-        {/* METRIC CARDS */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          
-          <div className="bg-[#0b1021] border border-emerald-500/30 rounded-2xl p-4 shadow-lg">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-              This Month&apos;s SaaS Revenue
-            </span>
-            <div className="text-2xl font-black font-mono text-emerald-400 mt-1">
-              ₹{currentMonthSaaSFees.toFixed(2)}
-            </div>
-            <p className="text-[10px] text-slate-500 mt-0.5">
-              1st to {now.getDate()} {now.toLocaleString('default', { month: 'short' })}
-            </p>
-          </div>
+        {/* ========================================================================= */}
+        {/* MAIN SECTION SWITCHER TABS (RIGHT BELOW THE 2 BOXES)                     */}
+        {/* ========================================================================= */}
+        <div className="flex items-center justify-start gap-3 pt-2">
+          <div className="bg-[#070b18] p-1.5 rounded-2xl border border-slate-800 flex items-center shadow-lg">
+            <button
+              type="button"
+              onClick={() => {
+                setAdminView('shops');
+                setSearchQuery('');
+              }}
+              className={`py-2.5 px-6 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2 ${
+                adminView === 'shops'
+                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 scale-[1.02]'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <span>🏪</span>
+              <span>Shops Control ({shops.length})</span>
+            </button>
 
-          <div className="bg-[#0b1021] border border-indigo-500/30 rounded-2xl p-4 shadow-lg">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-              Lifetime SaaS Revenue
-            </span>
-            <div className="text-2xl font-black font-mono text-indigo-400 mt-1">
-              ₹{lifetimeSaaSFees.toFixed(2)}
-            </div>
-            <p className="text-[10px] text-slate-500 mt-0.5">
-              Total subscription fees collected
-            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setAdminView('agents');
+                setSearchQuery('');
+              }}
+              className={`py-2.5 px-6 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2 ${
+                adminView === 'agents'
+                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 scale-[1.02]'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <span>🤝</span>
+              <span>Partner Agents ({partners.length})</span>
+            </button>
           </div>
-
-          <div className="bg-[#0b1021] border border-slate-800 rounded-2xl p-4 shadow-lg">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-              Registered Partner Agents
-            </span>
-            <div className="text-2xl font-black font-mono text-indigo-400 mt-1">
-              {partners.length} Agents
-            </div>
-            <p className="text-[10px] text-slate-400 mt-0.5 font-mono">
-              Campus & Field Affiliates
-            </p>
-          </div>
-
-          <div className="bg-[#0b1021] border border-slate-800 rounded-2xl p-4 shadow-lg">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-              Fleet Network Status
-            </span>
-            <div className="text-2xl font-black font-mono text-white mt-1">
-              {activeShopsCount} / {shops.length}
-            </div>
-            <p className="text-[10px] text-emerald-400 mt-0.5 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span>Online Spoolers</span>
-            </p>
-          </div>
-
         </div>
 
         {/* ========================================================================= */}
-        {/* TWO-TAB DIRECTORY: PRINT SHOPS VS PARTNER AGENTS                          */}
+        {/* VIEW 1: SHOPS DOMAIN (METRICS + SHOPS DIRECTORY)                         */}
         {/* ========================================================================= */}
-        <div className="bg-[#0b1021] border border-slate-800 rounded-3xl overflow-hidden shadow-2xl space-y-4 p-5 sm:p-6">
-          
-          {/* Header Controls & Tab Switcher */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
+        {adminView === 'shops' && (
+          <div className="space-y-6 animate-in fade-in duration-200">
             
-            {/* Sliding Pill Tabs */}
-            <div className="bg-[#070b18] p-1 rounded-2xl border border-slate-800 flex items-center w-full sm:w-auto">
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab('shops');
-                  setSearchQuery('');
-                }}
-                className={`py-2 px-5 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
-                  activeTab === 'shops'
-                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <span>🏪</span>
-                <span>Print Shops ({shops.length})</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab('partners');
-                  setSearchQuery('');
-                }}
-                className={`py-2 px-5 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
-                  activeTab === 'partners'
-                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <span>🤝</span>
-                <span>Partner Agents ({partners.length})</span>
-              </button>
-            </div>
-
-            {/* Live Search Input */}
-            <div className="w-full sm:w-auto">
-              <input
-                type="text"
-                placeholder={
-                  activeTab === 'shops'
-                    ? 'Search shops by name, slug, phone or UTR...'
-                    : 'Search agents by name, phone, code or UPI...'
-                }
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-[#070b18] border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 w-full sm:w-72 font-mono"
-              />
-            </div>
-          </div>
-
-          {/* TAB 1: SHOPS DIRECTORY */}
-          {activeTab === 'shops' && (
-            <div className="overflow-x-auto animate-in fade-in duration-200">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-[#070b18] text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-800">
-                    <th className="p-3.5">Store Details</th>
-                    <th className="p-3.5">Plan & UTR Verification</th>
-                    <th className="p-3.5">Referral Partner</th>
-                    <th className="p-3.5">Counter Telemetry</th>
-                    <th className="p-3.5">Credentials</th>
-                    <th className="p-3.5">Subscription Lock</th>
-                    <th className="p-3.5 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/80">
-                  {filteredShops.map((s) => {
-                    const isStoreOnline = Boolean(
-                      s.is_online &&
-                      !s.is_paused &&
-                      s.last_seen &&
-                      (Date.now() - new Date(s.last_seen).getTime()) / 1000 < 25
-                    );
-
-                    const subEnd = s.subscription_end ? new Date(s.subscription_end) : new Date();
-                    const isExpired = subEnd.getTime() < Date.now();
-                    const daysLeft = isExpired
-                      ? 0
-                      : Math.ceil((subEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-                    const planType = (s.plan_type || 'trial').toUpperCase();
-                    const isPaused = Boolean(s.is_paused);
-                    const isUtrVerified = s.payment_verified === true;
-
-                    return (
-                      <tr key={s.id} className="hover:bg-slate-800/20 transition-colors">
-                        <td className="p-3.5">
-                          <button
-                            onClick={() => router.push(`/admin/shops/${s.slug}`)}
-                            className="font-bold text-white text-sm hover:text-indigo-400 transition-colors text-left cursor-pointer flex items-center gap-1.5"
-                          >
-                            <span>{s.business_name || s.name}</span>
-                            <span className="text-[10px] text-indigo-400 font-mono">⚡ 360°</span>
-                          </button>
-                          <div className="text-slate-400 text-[11px] mt-0.5">Owner: {s.owner_name || 'N/A'}</div>
-                          <a
-                            href={`/shop/${s.slug}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-[10px] text-slate-500 hover:text-slate-300 hover:underline inline-block mt-0.5"
-                          >
-                            (Customer QR Page ↗)
-                          </a>
-                        </td>
-
-                        <td className="p-3.5">
-                          <div className="space-y-1.5">
-                            <div className="flex items-center gap-1.5">
-                              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold font-mono border ${
-                                planType === 'PREMIUM'
-                                  ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-                                  : planType === 'STANDARD'
-                                  ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30'
-                                  : 'bg-slate-800 text-slate-300 border-slate-700'
-                              }`}>
-                                {planType}
-                              </span>
-                              {isPaused ? (
-                                <span className="text-[10px] font-mono font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded">
-                                  PAUSED
-                                </span>
-                              ) : isExpired ? (
-                                <span className="text-[10px] font-mono font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded animate-pulse">
-                                  EXPIRED
-                                </span>
-                              ) : (
-                                <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded">
-                                  {daysLeft}D LEFT
-                                </span>
-                              )}
-                            </div>
-
-                            {s.payment_utr ? (
-                              <div className="space-y-1">
-                                <div className="text-[10px] font-mono text-slate-300 bg-slate-900 px-2 py-1 rounded border border-slate-800 flex items-center justify-between gap-1">
-                                  <span className="text-slate-500">UTR:</span>
-                                  <span className="font-bold text-amber-400 select-all tracking-wider">{s.payment_utr}</span>
-                                </div>
-                                {isUtrVerified ? (
-                                  <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 block w-fit">
-                                    ✓ VERIFIED
-                                  </span>
-                                ) : (
-                                  <div className="flex items-center gap-1.5 pt-0.5">
-                                    <button
-                                      onClick={() => handleApproveUtr(s)}
-                                      className="text-[10px] bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded font-bold transition-all cursor-pointer"
-                                    >
-                                      ✓ Approve
-                                    </button>
-                                    <button
-                                      onClick={() => handleRejectUtr(s)}
-                                      className="text-[10px] bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded font-bold transition-all cursor-pointer"
-                                    >
-                                      ✕ Reject
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            ) : planType === 'TRIAL' ? (
-                              <span className="text-[10px] text-slate-500 font-mono block">Free Trial Plan</span>
-                            ) : (
-                              <span className="text-[10px] text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded font-mono block w-fit">
-                                ⚠️ UTR Missing
-                              </span>
-                            )}
-                          </div>
-                        </td>
-
-                        <td className="p-3.5">
-                          {s.referred_by_code ? (
-                            <div className="space-y-1">
-                              <span className="font-mono text-xs font-bold text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded block w-fit">
-                                {s.referred_by_code}
-                              </span>
-                              {s.commission_credited ? (
-                                <span className="text-[10px] text-emerald-400 font-bold block">
-                                  ✓ Commission Paid
-                                </span>
-                              ) : (
-                                <span className="text-[10px] text-amber-400 font-semibold block">
-                                  ⏳ Pending Approval
-                                </span>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-slate-600 text-[11px]">Direct Organic</span>
-                          )}
-                        </td>
-
-                        <td className="p-3.5">
-                          {isPaused ? (
-                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                              ⏸️ DISABLED
-                            </span>
-                          ) : isStoreOnline ? (
-                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                              CONNECTED
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">
-                              <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-                              OFFLINE
-                            </span>
-                          )}
-                        </td>
-
-                        <td className="p-3.5 font-mono text-[11px]">
-                          <div className="text-slate-300">ID: {s.phone}</div>
-                          <div className="text-rose-400 font-bold">Pass: {s.plain_password}</div>
-                        </td>
-
-                        <td className="p-3.5">
-                          <button
-                            onClick={() => handleToggleShopPause(s)}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow ${
-                              isPaused
-                                ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                                : 'bg-amber-600 hover:bg-amber-500 text-white'
-                            }`}
-                          >
-                            <span>{isPaused ? '▶️' : '⏸️'}</span>
-                            <span>{isPaused ? 'Resume Shop' : 'Pause Shop'}</span>
-                          </button>
-                        </td>
-
-                        <td className="p-3.5 text-right space-x-2">
-                          <button
-                            onClick={() => router.push(`/admin/shops/${s.slug}`)}
-                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold cursor-pointer transition-all shadow-md shadow-indigo-600/30"
-                          >
-                            Inspect 360° ⚡
-                          </button>
-                          <button
-                            onClick={() => handleDeleteShop(s.id, s.business_name || s.name)}
-                            className="px-2.5 py-1.5 bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/30 rounded-lg text-xs font-semibold cursor-pointer transition-all"
-                          >
-                            Delete
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* TAB 2: PARTNER PROGRAM AGENTS DIRECTORY */}
-          {activeTab === 'partners' && (
-            <div className="overflow-x-auto animate-in fade-in duration-200">
-              {filteredPartners.length === 0 ? (
-                <div className="p-12 text-center text-slate-500 text-xs space-y-2">
-                  <div className="text-3xl">🤝</div>
-                  <p>No partner agents registered yet.</p>
-                  <p className="text-[11px] text-slate-600">
-                    Agents who sign up on <b>/partner/register</b> will automatically appear here.
-                  </p>
+            {/* 4 SHOPS METRIC CARDS */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-[#0b1021] border border-emerald-500/30 rounded-2xl p-4 shadow-lg">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  This Month&apos;s SaaS Revenue
+                </span>
+                <div className="text-2xl font-black font-mono text-emerald-400 mt-1">
+                  ₹{currentMonthSaaSFees.toFixed(2)}
                 </div>
-              ) : (
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  1st to {now.getDate()} {now.toLocaleString('default', { month: 'short' })}
+                </p>
+              </div>
+
+              <div className="bg-[#0b1021] border border-indigo-500/30 rounded-2xl p-4 shadow-lg">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Lifetime SaaS Revenue
+                </span>
+                <div className="text-2xl font-black font-mono text-indigo-400 mt-1">
+                  ₹{lifetimeSaaSFees.toFixed(2)}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  Total subscription fees collected
+                </p>
+              </div>
+
+              <div className="bg-[#0b1021] border border-slate-800 rounded-2xl p-4 shadow-lg">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Active Paid Subscribers
+                </span>
+                <div className="text-2xl font-black font-mono text-amber-400 mt-1">
+                  {activeStandardCount + activePremiumCount} Shops
+                </div>
+                <p className="text-[10px] text-slate-400 mt-0.5 font-mono">
+                  {activeStandardCount} Std • {activePremiumCount} Prem
+                </p>
+              </div>
+
+              <div className="bg-[#0b1021] border border-slate-800 rounded-2xl p-4 shadow-lg">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Fleet Network Status
+                </span>
+                <div className="text-2xl font-black font-mono text-white mt-1">
+                  {activeShopsCount} / {shops.length}
+                </div>
+                <p className="text-[10px] text-emerald-400 mt-0.5 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span>Online Spoolers</span>
+                </p>
+              </div>
+            </div>
+
+            {/* SHOPS DIRECTORY TABLE */}
+            <div className="bg-[#0b1021] border border-slate-800 rounded-3xl overflow-hidden shadow-2xl p-5 sm:p-6 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-xs font-bold text-white uppercase tracking-wider">
+                  Registered Partner Counters Directory
+                </h2>
+                <input
+                  type="text"
+                  placeholder="Search shops by name, slug, phone, UTR or code..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="bg-[#070b18] border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 w-full sm:w-80 font-mono"
+                />
+              </div>
+
+              <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="bg-[#070b18] text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-800">
-                      <th className="p-3.5">Agent Details</th>
-                      <th className="p-3.5">Promo Code</th>
-                      <th className="p-3.5">Payout UPI ID</th>
-                      <th className="p-3.5">Shops Onboarded</th>
-                      <th className="p-3.5">Earnings & Wallet</th>
-                      <th className="p-3.5">Status</th>
+                      <th className="p-3.5">Store Details</th>
+                      <th className="p-3.5">Plan & UTR Verification</th>
+                      <th className="p-3.5">Referral Partner</th>
+                      <th className="p-3.5">Counter Telemetry</th>
+                      <th className="p-3.5">Credentials</th>
+                      <th className="p-3.5">Subscription Lock</th>
                       <th className="p-3.5 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/80">
-                    {filteredPartners.map((p) => {
-                      const referredCount = shops.filter(
-                        (s) => s.referred_by_code === p.referral_code
-                      ).length;
+                    {filteredShops.map((s) => {
+                      const isStoreOnline = Boolean(
+                        s.is_online &&
+                        !s.is_paused &&
+                        s.last_seen &&
+                        (Date.now() - new Date(s.last_seen).getTime()) / 1000 < 25
+                      );
+
+                      const subEnd = s.subscription_end ? new Date(s.subscription_end) : new Date();
+                      const isExpired = subEnd.getTime() < Date.now();
+                      const daysLeft = isExpired
+                        ? 0
+                        : Math.ceil((subEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                      const planType = (s.plan_type || 'trial').toUpperCase();
+                      const isPaused = Boolean(s.is_paused);
+                      const isUtrVerified = s.payment_verified === true;
 
                       return (
-                        <tr key={p.id} className="hover:bg-slate-800/20 transition-colors">
-                          {/* Agent Details */}
+                        <tr key={s.id} className="hover:bg-slate-800/20 transition-colors">
                           <td className="p-3.5">
-                            <div className="font-bold text-white text-sm">{p.full_name}</div>
-                            <div className="text-slate-400 text-[11px] font-mono mt-0.5">
-                              📞 {p.phone} • {p.email}
-                            </div>
-                            <div className="text-[10px] text-slate-500 font-mono mt-0.5">
-                              Joined: {new Date(p.created_at).toLocaleDateString()}
+                            <button
+                              onClick={() => router.push(`/admin/shops/${s.slug}`)}
+                              className="font-bold text-white text-sm hover:text-indigo-400 transition-colors text-left cursor-pointer flex items-center gap-1.5"
+                            >
+                              <span>{s.business_name || s.name}</span>
+                              <span className="text-[10px] text-indigo-400 font-mono">⚡ 360°</span>
+                            </button>
+                            <div className="text-slate-400 text-[11px] mt-0.5">Owner: {s.owner_name || 'N/A'}</div>
+                            <a
+                              href={`/shop/${s.slug}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[10px] text-slate-500 hover:text-slate-300 hover:underline inline-block mt-0.5"
+                            >
+                              (Customer QR Page ↗)
+                            </a>
+                          </td>
+
+                          <td className="p-3.5">
+                            <div className="space-y-1.5">
+                              <div className="flex items-center gap-1.5">
+                                <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold font-mono border ${
+                                  planType === 'PREMIUM'
+                                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                                    : planType === 'STANDARD'
+                                    ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30'
+                                    : 'bg-slate-800 text-slate-300 border-slate-700'
+                                }`}>
+                                  {planType}
+                                </span>
+                                {isPaused ? (
+                                  <span className="text-[10px] font-mono font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded">
+                                    PAUSED
+                                  </span>
+                                ) : isExpired ? (
+                                  <span className="text-[10px] font-mono font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded animate-pulse">
+                                    EXPIRED
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded">
+                                    {daysLeft}D LEFT
+                                  </span>
+                                )}
+                              </div>
+
+                              {s.payment_utr ? (
+                                <div className="space-y-1">
+                                  <div className="text-[10px] font-mono text-slate-300 bg-slate-900 px-2 py-1 rounded border border-slate-800 flex items-center justify-between gap-1">
+                                    <span className="text-slate-500">UTR:</span>
+                                    <span className="font-bold text-amber-400 select-all tracking-wider">{s.payment_utr}</span>
+                                  </div>
+                                  {isUtrVerified ? (
+                                    <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 block w-fit">
+                                      ✓ VERIFIED
+                                    </span>
+                                  ) : (
+                                    <div className="flex items-center gap-1.5 pt-0.5">
+                                      <button
+                                        onClick={() => handleApproveUtr(s)}
+                                        className="text-[10px] bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded font-bold transition-all cursor-pointer"
+                                      >
+                                        ✓ Approve
+                                      </button>
+                                      <button
+                                        onClick={() => handleRejectUtr(s)}
+                                        className="text-[10px] bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded font-bold transition-all cursor-pointer"
+                                      >
+                                        ✕ Reject
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              ) : planType === 'TRIAL' ? (
+                                <span className="text-[10px] text-slate-500 font-mono block">Free Trial Plan</span>
+                              ) : (
+                                <span className="text-[10px] text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded font-mono block w-fit">
+                                  ⚠️ UTR Missing
+                                </span>
+                              )}
                             </div>
                           </td>
 
-                          {/* Promo Code */}
                           <td className="p-3.5">
-                            <span className="font-mono text-sm font-black text-indigo-400 bg-indigo-500/10 border border-indigo-500/30 px-3 py-1 rounded-xl block w-fit select-all tracking-wider">
-                              {p.referral_code}
-                            </span>
+                            {s.referred_by_code ? (
+                              <div className="space-y-1">
+                                <span className="font-mono text-xs font-bold text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded block w-fit">
+                                  {s.referred_by_code}
+                                </span>
+                                {s.commission_credited ? (
+                                  <span className="text-[10px] text-emerald-400 font-bold block">
+                                    ✓ Commission Paid
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] text-amber-400 font-semibold block">
+                                    ⏳ Pending Approval
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-slate-600 text-[11px]">Direct Organic</span>
+                            )}
                           </td>
 
-                          {/* UPI ID */}
                           <td className="p-3.5">
-                            <div className="font-mono text-xs font-bold text-emerald-400 select-all bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg w-fit">
-                              {p.upi_id}
-                            </div>
-                          </td>
-
-                          {/* Stores Count */}
-                          <td className="p-3.5">
-                            <div className="font-mono text-base font-black text-white">
-                              {referredCount} <span className="text-[11px] font-normal text-slate-400">Stores</span>
-                            </div>
-                          </td>
-
-                          {/* Earnings & Wallet */}
-                          <td className="p-3.5 space-y-1">
-                            <div className="text-[11px] text-slate-400">
-                              Lifetime: <span className="font-mono font-bold text-white">₹{p.total_earned || 0}</span>
-                            </div>
-                            <div className="text-[11px] text-emerald-400 font-bold">
-                              Wallet: <span className="font-mono text-sm font-black">₹{p.wallet_balance || 0}</span>
-                            </div>
-                          </td>
-
-                          {/* Status */}
-                          <td className="p-3.5">
-                            {p.is_active ? (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                                ACTIVE
+                            {isPaused ? (
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                ⏸️ DISABLED
+                              </span>
+                            ) : isStoreOnline ? (
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                                CONNECTED
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">
-                                SUSPENDED
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                                <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                                OFFLINE
                               </span>
                             )}
                           </td>
 
-                          {/* Actions */}
-                          <td className="p-3.5 text-right space-x-2">
+                          <td className="p-3.5 font-mono text-[11px]">
+                            <div className="text-slate-300">ID: {s.phone}</div>
+                            <div className="text-rose-400 font-bold">Pass: {s.plain_password}</div>
+                          </td>
+
+                          <td className="p-3.5">
                             <button
-                              type="button"
-                              onClick={() => handleTogglePartnerStatus(p)}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                                p.is_active
-                                  ? 'bg-amber-600/20 hover:bg-amber-600/40 text-amber-300 border border-amber-500/30'
-                                  : 'bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/30'
+                              onClick={() => handleToggleShopPause(s)}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow ${
+                                isPaused
+                                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                                  : 'bg-amber-600 hover:bg-amber-500 text-white'
                               }`}
                             >
-                              {p.is_active ? 'Suspend' : 'Activate'}
+                              <span>{isPaused ? '▶️' : '⏸️'}</span>
+                              <span>{isPaused ? 'Resume Shop' : 'Pause Shop'}</span>
+                            </button>
+                          </td>
+
+                          <td className="p-3.5 text-right space-x-2">
+                            <button
+                              onClick={() => router.push(`/admin/shops/${s.slug}`)}
+                              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold cursor-pointer transition-all shadow-md shadow-indigo-600/30"
+                            >
+                              Inspect 360° ⚡
                             </button>
                             <button
-                              type="button"
-                              onClick={() => handleDeletePartner(p)}
+                              onClick={() => handleDeleteShop(s.id, s.business_name || s.name)}
                               className="px-2.5 py-1.5 bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/30 rounded-lg text-xs font-semibold cursor-pointer transition-all"
                             >
                               Delete
@@ -1188,11 +1103,192 @@ export default function AdminSuperDashboard() {
                     })}
                   </tbody>
                 </table>
-              )}
+              </div>
             </div>
-          )}
+          </div>
+        )}
 
-        </div>
+        {/* ========================================================================= */}
+        {/* VIEW 2: AGENTS DOMAIN (DEDICATED AGENT STATS + AGENTS DIRECTORY)         */}
+        {/* ========================================================================= */}
+        {adminView === 'agents' && (
+          <div className="space-y-6 animate-in fade-in duration-200">
+            
+            {/* 4 AGENT METRICS CARDS */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-[#0b1021] border border-emerald-500/30 rounded-2xl p-4 shadow-lg">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Paid to Agents (This Month)
+                </span>
+                <div className="text-2xl font-black font-mono text-emerald-400 mt-1">
+                  ₹{totalPaidToAgentsMonth.toFixed(2)}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  Commission payouts settled this month
+                </p>
+              </div>
+
+              <div className="bg-[#0b1021] border border-indigo-500/30 rounded-2xl p-4 shadow-lg">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Total Lifetime Paid to Agents
+                </span>
+                <div className="text-2xl font-black font-mono text-indigo-400 mt-1">
+                  ₹{totalPaidToAgentsLifetime.toFixed(2)}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  All-time agent commissions cleared
+                </p>
+              </div>
+
+              <div className="bg-[#0b1021] border border-slate-800 rounded-2xl p-4 shadow-lg">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Total Partner Agents
+                </span>
+                <div className="text-2xl font-black font-mono text-amber-400 mt-1">
+                  {partners.length} Agents
+                </div>
+                <p className="text-[10px] text-slate-400 mt-0.5 font-mono">
+                  Active campus/field network
+                </p>
+              </div>
+
+              <div className="bg-[#0b1021] border border-slate-800 rounded-2xl p-4 shadow-lg">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Shops Added by Agents
+                </span>
+                <div className="text-2xl font-black font-mono text-white mt-1">
+                  {totalShopsAddedByAgents} Shops
+                </div>
+                <p className="text-[10px] text-emerald-400 mt-0.5 flex items-center gap-1">
+                  <span>🚀</span>
+                  <span>Acquired via referral codes</span>
+                </p>
+              </div>
+            </div>
+
+            {/* AGENTS DIRECTORY TABLE */}
+            <div className="bg-[#0b1021] border border-slate-800 rounded-3xl overflow-hidden shadow-2xl p-5 sm:p-6 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-xs font-bold text-white uppercase tracking-wider">
+                  Registered Referral Agents Directory
+                </h2>
+                <input
+                  type="text"
+                  placeholder="Search agents by name, phone, code or UPI..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="bg-[#070b18] border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 w-full sm:w-80 font-mono"
+                />
+              </div>
+
+              <div className="overflow-x-auto">
+                {filteredPartners.length === 0 ? (
+                  <div className="p-12 text-center text-slate-500 text-xs space-y-2">
+                    <div className="text-3xl">🤝</div>
+                    <p>No partner agents registered yet.</p>
+                  </div>
+                ) : (
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-[#070b18] text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-800">
+                        <th className="p-3.5">Agent Details</th>
+                        <th className="p-3.5">Promo Code</th>
+                        <th className="p-3.5">Payout UPI ID</th>
+                        <th className="p-3.5">Shops Onboarded</th>
+                        <th className="p-3.5">Earnings & Balance</th>
+                        <th className="p-3.5">Status</th>
+                        <th className="p-3.5 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/80">
+                      {filteredPartners.map((p) => {
+                        const referredCount = shops.filter(
+                          (s) => s.referred_by_code === p.referral_code
+                        ).length;
+
+                        return (
+                          <tr key={p.id} className="hover:bg-slate-800/20 transition-colors">
+                            <td className="p-3.5">
+                              <div className="font-bold text-white text-sm">{p.full_name}</div>
+                              <div className="text-slate-400 text-[11px] font-mono mt-0.5">
+                                📞 {p.phone} • {p.email}
+                              </div>
+                              <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                                Joined: {new Date(p.created_at).toLocaleDateString()}
+                              </div>
+                            </td>
+
+                            <td className="p-3.5">
+                              <span className="font-mono text-sm font-black text-indigo-400 bg-indigo-500/10 border border-indigo-500/30 px-3 py-1 rounded-xl block w-fit select-all tracking-wider">
+                                {p.referral_code}
+                              </span>
+                            </td>
+
+                            <td className="p-3.5">
+                              <div className="font-mono text-xs font-bold text-emerald-400 select-all bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg w-fit">
+                                {p.upi_id}
+                              </div>
+                            </td>
+
+                            <td className="p-3.5">
+                              <div className="font-mono text-base font-black text-white">
+                                {referredCount} <span className="text-[11px] font-normal text-slate-400">Stores</span>
+                              </div>
+                            </td>
+
+                            <td className="p-3.5 space-y-1">
+                              <div className="text-[11px] text-slate-400">
+                                Lifetime: <span className="font-mono font-bold text-white">₹{p.total_earned || 0}</span>
+                              </div>
+                              <div className="text-[11px] text-emerald-400 font-bold">
+                                Wallet: <span className="font-mono text-sm font-black">₹{p.wallet_balance || 0}</span>
+                              </div>
+                            </td>
+
+                            <td className="p-3.5">
+                              {p.is_active ? (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                                  ACTIVE
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                                  SUSPENDED
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="p-3.5 text-right space-x-2">
+                              <button
+                                type="button"
+                                onClick={() => handleTogglePartnerStatus(p)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                  p.is_active
+                                    ? 'bg-amber-600/20 hover:bg-amber-600/40 text-amber-300 border border-amber-500/30'
+                                    : 'bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/30'
+                                }`}
+                              >
+                                {p.is_active ? 'Suspend' : 'Activate'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeletePartner(p)}
+                                className="px-2.5 py-1.5 bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/30 rounded-lg text-xs font-semibold cursor-pointer transition-all"
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );
