@@ -22,8 +22,12 @@ export default function AdminSuperDashboard() {
   const [authError, setAuthError] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Shop & Platform Metrics
+  // Active View Tab: 'shops' | 'partners'
+  const [activeTab, setActiveTab] = useState<'shops' | 'partners'>('shops');
+
+  // Shop, Partner & Platform Metrics
   const [shops, setShops] = useState<any[]>([]);
+  const [partners, setPartners] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -86,11 +90,16 @@ export default function AdminSuperDashboard() {
     setInputPassword('');
   };
 
-  // Fetch shops & orders
+  // Fetch shops, partners & orders
   const fetchAdminData = async () => {
     setLoading(true);
     const { data: shopsData } = await supabase
       .from('shops')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    const { data: partnersData } = await supabase
+      .from('partners')
       .select('*')
       .order('created_at', { ascending: false });
 
@@ -100,6 +109,7 @@ export default function AdminSuperDashboard() {
       .order('created_at', { ascending: false });
 
     if (shopsData) setShops(shopsData);
+    if (partnersData) setPartners(partnersData);
     if (ordersData) setOrders(ordersData);
     setLoading(false);
   };
@@ -212,7 +222,7 @@ export default function AdminSuperDashboard() {
     }
   };
 
-  // UTR SUBSCRIPTION VERIFICATION ACTIONS (WITH PARTNER COMMISSION AUTO-CREDIT)
+  // UTR SUBSCRIPTION VERIFICATION ACTIONS
   const handleApproveUtr = async (shop: any) => {
     if (!confirm(`Confirm payment received for "${shop.business_name || shop.name}" (UTR: ${shop.payment_utr})?`)) return;
 
@@ -230,7 +240,7 @@ export default function AdminSuperDashboard() {
       return;
     }
 
-    // Auto-Credit Commission to Partner if referred
+    // Auto-Credit Commission to Partner
     if (shop.referred_by_code && !shop.commission_credited) {
       const plan = (shop.plan_type || 'standard').toLowerCase();
       const commission = plan === 'premium' ? 150 : 100;
@@ -255,6 +265,14 @@ export default function AdminSuperDashboard() {
             .from('shops')
             .update({ commission_credited: true })
             .eq('id', shop.id);
+
+          setPartners((prev) =>
+            prev.map((p) =>
+              p.id === partner.id
+                ? { ...p, wallet_balance: newWallet, total_earned: newTotal }
+                : p
+            )
+          );
         }
       } catch (e) {
         console.error('Commission credit error:', e);
@@ -318,6 +336,39 @@ export default function AdminSuperDashboard() {
       alert('Failed to settle payout: ' + err.message);
     } finally {
       setSettlingPayoutId(null);
+    }
+  };
+
+  // Toggle Partner Active Status
+  const handleTogglePartnerStatus = async (partner: any) => {
+    const willActive = !partner.is_active;
+    const { error } = await supabase
+      .from('partners')
+      .update({ is_active: willActive })
+      .eq('id', partner.id);
+
+    if (!error) {
+      setPartners((prev) =>
+        prev.map((p) => (p.id === partner.id ? { ...p, is_active: willActive } : p))
+      );
+    } else {
+      alert('Status update failed: ' + error.message);
+    }
+  };
+
+  // Delete Partner
+  const handleDeletePartner = async (partner: any) => {
+    if (!confirm(`Delete partner "${partner.full_name}" (${partner.referral_code}) permanently?`)) return;
+
+    const { error } = await supabase
+      .from('partners')
+      .delete()
+      .eq('id', partner.id);
+
+    if (!error) {
+      setPartners((prev) => prev.filter((p) => p.id !== partner.id));
+    } else {
+      alert('Failed to delete partner: ' + error.message);
     }
   };
 
@@ -406,7 +457,7 @@ export default function AdminSuperDashboard() {
   }
 
   // =========================================================================
-  // SAAS SUBSCRIPTION REVENUE COMPUTATION
+  // REVENUE COMPUTATION
   // =========================================================================
   const getPlanCost = (planType?: string, billingCycle?: string, hasReferral?: boolean) => {
     const p = (planType || '').toLowerCase();
@@ -419,7 +470,7 @@ export default function AdminSuperDashboard() {
       if (hasReferral) return c === 'yearly' ? 1759 : 199;
       return c === 'yearly' ? 2199 : 249;
     }
-    return 0; // trial is free
+    return 0;
   };
 
   const now = new Date();
@@ -465,6 +516,7 @@ export default function AdminSuperDashboard() {
 
   const pendingUtrShops = shops.filter((s) => s.payment_utr && s.payment_verified !== true);
 
+  // Filters
   const filteredShops = shops.filter(
     (s) =>
       s.business_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -472,6 +524,15 @@ export default function AdminSuperDashboard() {
       s.phone?.includes(searchQuery) ||
       s.payment_utr?.includes(searchQuery) ||
       s.referred_by_code?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const filteredPartners = partners.filter(
+    (p) =>
+      p.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.phone?.includes(searchQuery) ||
+      p.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.referral_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.upi_id?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -488,7 +549,7 @@ export default function AdminSuperDashboard() {
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Live Fleet Control, Partner Payouts, Subscription Verification & Directory
+              Live Fleet Control, Partner Agents Network, Subscription Verification & Telemetry
             </p>
           </div>
 
@@ -731,13 +792,13 @@ export default function AdminSuperDashboard() {
 
           <div className="bg-[#0b1021] border border-slate-800 rounded-2xl p-4 shadow-lg">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-              Active Paid Subscribers
+              Registered Partner Agents
             </span>
-            <div className="text-2xl font-black font-mono text-amber-400 mt-1">
-              {activeStandardCount + activePremiumCount} Shops
+            <div className="text-2xl font-black font-mono text-indigo-400 mt-1">
+              {partners.length} Agents
             </div>
             <p className="text-[10px] text-slate-400 mt-0.5 font-mono">
-              {activeStandardCount} Std (₹149) • {activePremiumCount} Prem (₹249)
+              Campus & Field Affiliates
             </p>
           </div>
 
@@ -756,220 +817,381 @@ export default function AdminSuperDashboard() {
 
         </div>
 
-        {/* Merchant Directory */}
-        <div className="bg-[#0b1021] border border-slate-800 rounded-2xl overflow-hidden shadow-xl space-y-4 p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-xs font-bold text-white uppercase tracking-wider">Registered Partner Counters</h2>
-            <input
-              type="text"
-              placeholder="Search by store name, slug, phone, UTR or Referral Code..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-[#070b18] border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 w-full max-w-xs font-mono"
-            />
+        {/* ========================================================================= */}
+        {/* TWO-TAB DIRECTORY: PRINT SHOPS VS PARTNER AGENTS                          */}
+        {/* ========================================================================= */}
+        <div className="bg-[#0b1021] border border-slate-800 rounded-3xl overflow-hidden shadow-2xl space-y-4 p-5 sm:p-6">
+          
+          {/* Header Controls & Tab Switcher */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
+            
+            {/* Sliding Pill Tabs */}
+            <div className="bg-[#070b18] p-1 rounded-2xl border border-slate-800 flex items-center w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('shops');
+                  setSearchQuery('');
+                }}
+                className={`py-2 px-5 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
+                  activeTab === 'shops'
+                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <span>🏪</span>
+                <span>Print Shops ({shops.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('partners');
+                  setSearchQuery('');
+                }}
+                className={`py-2 px-5 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
+                  activeTab === 'partners'
+                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <span>🤝</span>
+                <span>Partner Agents ({partners.length})</span>
+              </button>
+            </div>
+
+            {/* Live Search Input */}
+            <div className="w-full sm:w-auto">
+              <input
+                type="text"
+                placeholder={
+                  activeTab === 'shops'
+                    ? 'Search shops by name, slug, phone or UTR...'
+                    : 'Search agents by name, phone, code or UPI...'
+                }
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="bg-[#070b18] border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 w-full sm:w-72 font-mono"
+              />
+            </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-[#070b18] text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-800">
-                  <th className="p-3.5">Store Details</th>
-                  <th className="p-3.5">Plan & UTR Verification</th>
-                  <th className="p-3.5">Referral Partner</th>
-                  <th className="p-3.5">Counter Telemetry</th>
-                  <th className="p-3.5">Credentials</th>
-                  <th className="p-3.5">Subscription Lock</th>
-                  <th className="p-3.5 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/80">
-                {filteredShops.map((s) => {
-                  const isStoreOnline = Boolean(
-                    s.is_online &&
-                    !s.is_paused &&
-                    s.last_seen &&
-                    (Date.now() - new Date(s.last_seen).getTime()) / 1000 < 25
-                  );
+          {/* TAB 1: SHOPS DIRECTORY */}
+          {activeTab === 'shops' && (
+            <div className="overflow-x-auto animate-in fade-in duration-200">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-[#070b18] text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-800">
+                    <th className="p-3.5">Store Details</th>
+                    <th className="p-3.5">Plan & UTR Verification</th>
+                    <th className="p-3.5">Referral Partner</th>
+                    <th className="p-3.5">Counter Telemetry</th>
+                    <th className="p-3.5">Credentials</th>
+                    <th className="p-3.5">Subscription Lock</th>
+                    <th className="p-3.5 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/80">
+                  {filteredShops.map((s) => {
+                    const isStoreOnline = Boolean(
+                      s.is_online &&
+                      !s.is_paused &&
+                      s.last_seen &&
+                      (Date.now() - new Date(s.last_seen).getTime()) / 1000 < 25
+                    );
 
-                  const subEnd = s.subscription_end ? new Date(s.subscription_end) : new Date();
-                  const isExpired = subEnd.getTime() < Date.now();
-                  const daysLeft = isExpired
-                    ? 0
-                    : Math.ceil((subEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-                  const planType = (s.plan_type || 'trial').toUpperCase();
-                  const isPaused = Boolean(s.is_paused);
-                  const isUtrVerified = s.payment_verified === true;
+                    const subEnd = s.subscription_end ? new Date(s.subscription_end) : new Date();
+                    const isExpired = subEnd.getTime() < Date.now();
+                    const daysLeft = isExpired
+                      ? 0
+                      : Math.ceil((subEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                    const planType = (s.plan_type || 'trial').toUpperCase();
+                    const isPaused = Boolean(s.is_paused);
+                    const isUtrVerified = s.payment_verified === true;
 
-                  return (
-                    <tr key={s.id} className="hover:bg-slate-800/20 transition-colors">
-                      {/* Store details */}
-                      <td className="p-3.5">
-                        <button
-                          onClick={() => router.push(`/admin/shops/${s.slug}`)}
-                          className="font-bold text-white text-sm hover:text-indigo-400 transition-colors text-left cursor-pointer flex items-center gap-1.5"
-                        >
-                          <span>{s.business_name || s.name}</span>
-                          <span className="text-[10px] text-indigo-400 font-mono">⚡ 360°</span>
-                        </button>
-                        <div className="text-slate-400 text-[11px] mt-0.5">Owner: {s.owner_name || 'N/A'}</div>
-                        <a
-                          href={`/shop/${s.slug}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[10px] text-slate-500 hover:text-slate-300 hover:underline inline-block mt-0.5"
-                        >
-                          (Customer QR Page ↗)
-                        </a>
-                      </td>
+                    return (
+                      <tr key={s.id} className="hover:bg-slate-800/20 transition-colors">
+                        <td className="p-3.5">
+                          <button
+                            onClick={() => router.push(`/admin/shops/${s.slug}`)}
+                            className="font-bold text-white text-sm hover:text-indigo-400 transition-colors text-left cursor-pointer flex items-center gap-1.5"
+                          >
+                            <span>{s.business_name || s.name}</span>
+                            <span className="text-[10px] text-indigo-400 font-mono">⚡ 360°</span>
+                          </button>
+                          <div className="text-slate-400 text-[11px] mt-0.5">Owner: {s.owner_name || 'N/A'}</div>
+                          <a
+                            href={`/shop/${s.slug}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[10px] text-slate-500 hover:text-slate-300 hover:underline inline-block mt-0.5"
+                          >
+                            (Customer QR Page ↗)
+                          </a>
+                        </td>
 
-                      {/* Plan & Clean UTR Verification Column */}
-                      <td className="p-3.5">
-                        <div className="space-y-1.5">
-                          <div className="flex items-center gap-1.5">
-                            <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold font-mono border ${
-                              planType === 'PREMIUM'
-                                ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-                                : planType === 'STANDARD'
-                                ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30'
-                                : 'bg-slate-800 text-slate-300 border-slate-700'
-                            }`}>
-                              {planType}
-                            </span>
-                            {isPaused ? (
-                              <span className="text-[10px] font-mono font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded">
-                                PAUSED
+                        <td className="p-3.5">
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold font-mono border ${
+                                planType === 'PREMIUM'
+                                  ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                                  : planType === 'STANDARD'
+                                  ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30'
+                                  : 'bg-slate-800 text-slate-300 border-slate-700'
+                              }`}>
+                                {planType}
                               </span>
-                            ) : isExpired ? (
-                              <span className="text-[10px] font-mono font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded animate-pulse">
-                                EXPIRED
-                              </span>
-                            ) : (
-                              <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded">
-                                {daysLeft}D LEFT
-                              </span>
-                            )}
-                          </div>
-
-                          {s.payment_utr ? (
-                            <div className="space-y-1">
-                              <div className="text-[10px] font-mono text-slate-300 bg-slate-900 px-2 py-1 rounded border border-slate-800 flex items-center justify-between gap-1">
-                                <span className="text-slate-500">UTR:</span>
-                                <span className="font-bold text-amber-400 select-all tracking-wider">{s.payment_utr}</span>
-                              </div>
-                              {isUtrVerified ? (
-                                <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 block w-fit">
-                                  ✓ VERIFIED
+                              {isPaused ? (
+                                <span className="text-[10px] font-mono font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded">
+                                  PAUSED
+                                </span>
+                              ) : isExpired ? (
+                                <span className="text-[10px] font-mono font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded animate-pulse">
+                                  EXPIRED
                                 </span>
                               ) : (
-                                <div className="flex items-center gap-1.5 pt-0.5">
-                                  <button
-                                    onClick={() => handleApproveUtr(s)}
-                                    className="text-[10px] bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded font-bold transition-all cursor-pointer"
-                                  >
-                                    ✓ Approve
-                                  </button>
-                                  <button
-                                    onClick={() => handleRejectUtr(s)}
-                                    className="text-[10px] bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded font-bold transition-all cursor-pointer"
-                                  >
-                                    ✕ Reject
-                                  </button>
-                                </div>
+                                <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded">
+                                  {daysLeft}D LEFT
+                                </span>
                               )}
                             </div>
-                          ) : planType === 'TRIAL' ? (
-                            <span className="text-[10px] text-slate-500 font-mono block">Free Trial Plan</span>
-                          ) : (
-                            <span className="text-[10px] text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded font-mono block w-fit">
-                              ⚠️ UTR Missing
-                            </span>
-                          )}
-                        </div>
-                      </td>
 
-                      {/* Referral Partner Column */}
-                      <td className="p-3.5">
-                        {s.referred_by_code ? (
-                          <div className="space-y-1">
-                            <span className="font-mono text-xs font-bold text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded block w-fit">
-                              {s.referred_by_code}
-                            </span>
-                            {s.commission_credited ? (
-                              <span className="text-[10px] text-emerald-400 font-bold block">
-                                ✓ Commission Paid
-                              </span>
+                            {s.payment_utr ? (
+                              <div className="space-y-1">
+                                <div className="text-[10px] font-mono text-slate-300 bg-slate-900 px-2 py-1 rounded border border-slate-800 flex items-center justify-between gap-1">
+                                  <span className="text-slate-500">UTR:</span>
+                                  <span className="font-bold text-amber-400 select-all tracking-wider">{s.payment_utr}</span>
+                                </div>
+                                {isUtrVerified ? (
+                                  <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 block w-fit">
+                                    ✓ VERIFIED
+                                  </span>
+                                ) : (
+                                  <div className="flex items-center gap-1.5 pt-0.5">
+                                    <button
+                                      onClick={() => handleApproveUtr(s)}
+                                      className="text-[10px] bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded font-bold transition-all cursor-pointer"
+                                    >
+                                      ✓ Approve
+                                    </button>
+                                    <button
+                                      onClick={() => handleRejectUtr(s)}
+                                      className="text-[10px] bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded font-bold transition-all cursor-pointer"
+                                    >
+                                      ✕ Reject
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            ) : planType === 'TRIAL' ? (
+                              <span className="text-[10px] text-slate-500 font-mono block">Free Trial Plan</span>
                             ) : (
-                              <span className="text-[10px] text-amber-400 font-semibold block">
-                                ⏳ Pending Approval
+                              <span className="text-[10px] text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded font-mono block w-fit">
+                                ⚠️ UTR Missing
                               </span>
                             )}
                           </div>
-                        ) : (
-                          <span className="text-slate-600 text-[11px]">Direct Organic</span>
-                        )}
-                      </td>
+                        </td>
 
-                      {/* Online Status */}
-                      <td className="p-3.5">
-                        {isPaused ? (
-                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                            ⏸️ DISABLED
-                          </span>
-                        ) : isStoreOnline ? (
-                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                            CONNECTED
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">
-                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-                            OFFLINE
-                          </span>
-                        )}
-                      </td>
+                        <td className="p-3.5">
+                          {s.referred_by_code ? (
+                            <div className="space-y-1">
+                              <span className="font-mono text-xs font-bold text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded block w-fit">
+                                {s.referred_by_code}
+                              </span>
+                              {s.commission_credited ? (
+                                <span className="text-[10px] text-emerald-400 font-bold block">
+                                  ✓ Commission Paid
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-amber-400 font-semibold block">
+                                  ⏳ Pending Approval
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-600 text-[11px]">Direct Organic</span>
+                          )}
+                        </td>
 
-                      {/* Credentials */}
-                      <td className="p-3.5 font-mono text-[11px]">
-                        <div className="text-slate-300">ID: {s.phone}</div>
-                        <div className="text-rose-400 font-bold">Pass: {s.plain_password}</div>
-                      </td>
+                        <td className="p-3.5">
+                          {isPaused ? (
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                              ⏸️ DISABLED
+                            </span>
+                          ) : isStoreOnline ? (
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                              CONNECTED
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                              <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                              OFFLINE
+                            </span>
+                          )}
+                        </td>
 
-                      {/* Pause / Resume Toggle */}
-                      <td className="p-3.5">
-                        <button
-                          onClick={() => handleToggleShopPause(s)}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow ${
-                            isPaused
-                              ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                              : 'bg-amber-600 hover:bg-amber-500 text-white'
-                          }`}
-                        >
-                          <span>{isPaused ? '▶️' : '⏸️'}</span>
-                          <span>{isPaused ? 'Resume Shop' : 'Pause Shop'}</span>
-                        </button>
-                      </td>
+                        <td className="p-3.5 font-mono text-[11px]">
+                          <div className="text-slate-300">ID: {s.phone}</div>
+                          <div className="text-rose-400 font-bold">Pass: {s.plain_password}</div>
+                        </td>
 
-                      {/* Actions */}
-                      <td className="p-3.5 text-right space-x-2">
-                        <button
-                          onClick={() => router.push(`/admin/shops/${s.slug}`)}
-                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold cursor-pointer transition-all shadow-md shadow-indigo-600/30"
-                        >
-                          Inspect 360° ⚡
-                        </button>
-                        <button
-                          onClick={() => handleDeleteShop(s.id, s.business_name || s.name)}
-                          className="px-2.5 py-1.5 bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/30 rounded-lg text-xs font-semibold cursor-pointer transition-all"
-                        >
-                          Delete
-                        </button>
-                      </td>
+                        <td className="p-3.5">
+                          <button
+                            onClick={() => handleToggleShopPause(s)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow ${
+                              isPaused
+                                ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                                : 'bg-amber-600 hover:bg-amber-500 text-white'
+                            }`}
+                          >
+                            <span>{isPaused ? '▶️' : '⏸️'}</span>
+                            <span>{isPaused ? 'Resume Shop' : 'Pause Shop'}</span>
+                          </button>
+                        </td>
+
+                        <td className="p-3.5 text-right space-x-2">
+                          <button
+                            onClick={() => router.push(`/admin/shops/${s.slug}`)}
+                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold cursor-pointer transition-all shadow-md shadow-indigo-600/30"
+                          >
+                            Inspect 360° ⚡
+                          </button>
+                          <button
+                            onClick={() => handleDeleteShop(s.id, s.business_name || s.name)}
+                            className="px-2.5 py-1.5 bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/30 rounded-lg text-xs font-semibold cursor-pointer transition-all"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* TAB 2: PARTNER PROGRAM AGENTS DIRECTORY */}
+          {activeTab === 'partners' && (
+            <div className="overflow-x-auto animate-in fade-in duration-200">
+              {filteredPartners.length === 0 ? (
+                <div className="p-12 text-center text-slate-500 text-xs space-y-2">
+                  <div className="text-3xl">🤝</div>
+                  <p>No partner agents registered yet.</p>
+                  <p className="text-[11px] text-slate-600">
+                    Agents who sign up on <b>/partner/register</b> will automatically appear here.
+                  </p>
+                </div>
+              ) : (
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-[#070b18] text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-800">
+                      <th className="p-3.5">Agent Details</th>
+                      <th className="p-3.5">Promo Code</th>
+                      <th className="p-3.5">Payout UPI ID</th>
+                      <th className="p-3.5">Shops Onboarded</th>
+                      <th className="p-3.5">Earnings & Wallet</th>
+                      <th className="p-3.5">Status</th>
+                      <th className="p-3.5 text-right">Actions</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/80">
+                    {filteredPartners.map((p) => {
+                      const referredCount = shops.filter(
+                        (s) => s.referred_by_code === p.referral_code
+                      ).length;
+
+                      return (
+                        <tr key={p.id} className="hover:bg-slate-800/20 transition-colors">
+                          {/* Agent Details */}
+                          <td className="p-3.5">
+                            <div className="font-bold text-white text-sm">{p.full_name}</div>
+                            <div className="text-slate-400 text-[11px] font-mono mt-0.5">
+                              📞 {p.phone} • {p.email}
+                            </div>
+                            <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                              Joined: {new Date(p.created_at).toLocaleDateString()}
+                            </div>
+                          </td>
+
+                          {/* Promo Code */}
+                          <td className="p-3.5">
+                            <span className="font-mono text-sm font-black text-indigo-400 bg-indigo-500/10 border border-indigo-500/30 px-3 py-1 rounded-xl block w-fit select-all tracking-wider">
+                              {p.referral_code}
+                            </span>
+                          </td>
+
+                          {/* UPI ID */}
+                          <td className="p-3.5">
+                            <div className="font-mono text-xs font-bold text-emerald-400 select-all bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg w-fit">
+                              {p.upi_id}
+                            </div>
+                          </td>
+
+                          {/* Stores Count */}
+                          <td className="p-3.5">
+                            <div className="font-mono text-base font-black text-white">
+                              {referredCount} <span className="text-[11px] font-normal text-slate-400">Stores</span>
+                            </div>
+                          </td>
+
+                          {/* Earnings & Wallet */}
+                          <td className="p-3.5 space-y-1">
+                            <div className="text-[11px] text-slate-400">
+                              Lifetime: <span className="font-mono font-bold text-white">₹{p.total_earned || 0}</span>
+                            </div>
+                            <div className="text-[11px] text-emerald-400 font-bold">
+                              Wallet: <span className="font-mono text-sm font-black">₹{p.wallet_balance || 0}</span>
+                            </div>
+                          </td>
+
+                          {/* Status */}
+                          <td className="p-3.5">
+                            {p.is_active ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                                ACTIVE
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                                SUSPENDED
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Actions */}
+                          <td className="p-3.5 text-right space-x-2">
+                            <button
+                              type="button"
+                              onClick={() => handleTogglePartnerStatus(p)}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                p.is_active
+                                  ? 'bg-amber-600/20 hover:bg-amber-600/40 text-amber-300 border border-amber-500/30'
+                                  : 'bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/30'
+                              }`}
+                            >
+                              {p.is_active ? 'Suspend' : 'Activate'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeletePartner(p)}
+                              className="px-2.5 py-1.5 bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/30 rounded-lg text-xs font-semibold cursor-pointer transition-all"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+
         </div>
       </div>
     </div>
