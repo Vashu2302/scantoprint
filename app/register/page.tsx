@@ -12,8 +12,16 @@ const supabase = createClient(
 
 function RegisterMerchantForm() {
   const searchParams = useSearchParams();
-  const planParam = (searchParams.get('plan') || 'trial').toLowerCase();
-  const cycleParam = (searchParams.get('cycle') || 'monthly').toLowerCase();
+  const initialPlan = (searchParams.get('plan') || 'standard').toLowerCase();
+  const initialCycle = (searchParams.get('cycle') || 'monthly').toLowerCase();
+
+  // Dynamic In-Page Plan Selector State
+  const [activePlan, setActivePlan] = useState<'trial' | 'standard' | 'premium'>(
+    initialPlan === 'premium' ? 'premium' : initialPlan === 'trial' ? 'trial' : 'standard'
+  );
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>(
+    initialCycle === 'yearly' ? 'yearly' : 'monthly'
+  );
 
   const [step, setStep] = useState<'form' | 'payment'>('form');
   const [registeredShop, setRegisteredShop] = useState<any>(null);
@@ -42,7 +50,6 @@ function RegisterMerchantForm() {
     password: ''
   });
 
-  // Dynamic Browser Tab Title
   useEffect(() => {
     document.title = 'Create Merchant Account • ScanToPrint';
   }, []);
@@ -107,7 +114,7 @@ function RegisterMerchantForm() {
       setPartnerDiscount(true);
       setPromoMessage({
         type: 'success',
-        text: `🎉 Code ${partner.referral_code} Applied! 20% Special Partner Discount unlocked.`
+        text: `🎉 Code ${partner.referral_code} Applied! 20% Special Discount unlocked.`
       });
     } catch (err: any) {
       setPromoMessage({ type: 'error', text: 'Error verifying code.' });
@@ -123,9 +130,9 @@ function RegisterMerchantForm() {
     setPromoMessage(null);
   };
 
-  const isPremium = planParam === 'premium';
-  const isStandard = planParam === 'standard';
-  const isTrial = !isPremium && !isStandard;
+  const isPremium = activePlan === 'premium';
+  const isStandard = activePlan === 'standard';
+  const isTrial = activePlan === 'trial';
 
   const planName = isPremium
     ? 'Premium Plan'
@@ -135,16 +142,16 @@ function RegisterMerchantForm() {
 
   // Base pricing
   const baseNumericAmount = isPremium
-    ? cycleParam === 'yearly' ? 2199 : 249
+    ? billingCycle === 'yearly' ? 2199 : 249
     : isStandard
-    ? cycleParam === 'yearly' ? 1499 : 149
+    ? billingCycle === 'yearly' ? 1499 : 149
     : 0;
 
   // 20% Discounted Pricing if partner code is applied
   const planNumericAmount = partnerDiscount && !isTrial
     ? isPremium
-      ? cycleParam === 'yearly' ? 1759 : 199 // 20% off
-      : cycleParam === 'yearly' ? 1199 : 119 // 20% off
+      ? billingCycle === 'yearly' ? 1759 : 199
+      : billingCycle === 'yearly' ? 1199 : 119
     : baseNumericAmount;
 
   const planCost = isTrial
@@ -152,8 +159,8 @@ function RegisterMerchantForm() {
     : partnerDiscount
     ? `₹${planNumericAmount} (20% OFF applied)`
     : isPremium
-    ? cycleParam === 'yearly' ? '₹2,199 / yr' : '₹249 / mo'
-    : cycleParam === 'yearly' ? '₹1,499 / yr' : '₹149 / mo';
+    ? billingCycle === 'yearly' ? '₹2,199 / yr' : '₹249 / mo'
+    : billingCycle === 'yearly' ? '₹1,499 / yr' : '₹149 / mo';
 
   const planQuota = isPremium
     ? 'Unlimited Pages & Priority Spool'
@@ -161,7 +168,7 @@ function RegisterMerchantForm() {
     ? '500 Pages Quota + Top-Up Support'
     : 'Full Unrestricted Access for 7 Days';
 
-  const upiDeepLink = `upi://pay?pa=${adminUpi}&pn=ScanToPrint%20Platform&am=${planNumericAmount}&cu=INR&tn=STP%20${planParam.toUpperCase()}%20Plan`;
+  const upiDeepLink = `upi://pay?pa=${adminUpi}&pn=ScanToPrint%20Platform&am=${planNumericAmount}&cu=INR&tn=STP%20${activePlan.toUpperCase()}%20Plan`;
   const upiQrImageSrc = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(upiDeepLink)}`;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -175,8 +182,8 @@ function RegisterMerchantForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...form,
-          planType: planParam,
-          billingCycle: cycleParam,
+          planType: activePlan,
+          billingCycle: billingCycle,
           referredByCode: appliedCode || null
         })
       });
@@ -207,7 +214,6 @@ function RegisterMerchantForm() {
     }
   };
 
-  // Synchronous Await UTR submission
   const handleUtrSubmitAndRedirect = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!registeredShop) {
@@ -225,7 +231,6 @@ function RegisterMerchantForm() {
     setErrorMessage('');
 
     try {
-      // 1. Primary Route: Server API
       const res = await fetch('/api/shops/submit-utr', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -236,7 +241,6 @@ function RegisterMerchantForm() {
       });
 
       if (!res.ok) {
-        // 2. Direct Fallback if API returns error
         await supabase
           .from('shops')
           .update({
@@ -247,7 +251,6 @@ function RegisterMerchantForm() {
           .eq('id', registeredShop.id);
       }
 
-      // Update local storage cache
       if (typeof window !== 'undefined') {
         const updatedShop = {
           ...registeredShop,
@@ -279,7 +282,7 @@ function RegisterMerchantForm() {
 
       <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10">
         
-        {/* Left Card: Summary */}
+        {/* Left Card: Summary & Plan Switcher */}
         <div className="lg:col-span-5 bg-gradient-to-b from-[#0b1021] to-[#070b18] border border-slate-800 rounded-3xl p-6 sm:p-8 flex flex-col justify-between shadow-2xl relative overflow-hidden">
           <div className="absolute -top-16 -right-16 w-36 h-36 bg-indigo-500/10 rounded-full blur-2xl"></div>
 
@@ -289,10 +292,57 @@ function RegisterMerchantForm() {
               <span>Back to Plans</span>
             </Link>
 
+            {/* In-page Plan Sliding Pill Switcher */}
             <div className="space-y-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                Select Subscription Plan
+              </span>
+              <div className="relative bg-[#070b18] p-1 rounded-2xl border border-slate-800 flex items-center">
+                {/* Smooth Animated Sliding Indicator */}
+                <div
+                  className={`absolute top-1 bottom-1 w-[32%] rounded-xl transition-all duration-300 ease-out shadow-lg ${
+                    activePlan === 'trial'
+                      ? 'left-1 bg-slate-800 border border-slate-700'
+                      : activePlan === 'standard'
+                      ? 'left-[34%] bg-indigo-600 border border-indigo-500'
+                      : 'left-[67%] bg-amber-600 border border-amber-500'
+                  }`}
+                />
+
+                <button
+                  type="button"
+                  onClick={() => setActivePlan('trial')}
+                  className={`relative z-10 flex-1 py-2 text-center text-xs font-bold rounded-xl transition-colors cursor-pointer ${
+                    activePlan === 'trial' ? 'text-white' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Trial
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActivePlan('standard')}
+                  className={`relative z-10 flex-1 py-2 text-center text-xs font-bold rounded-xl transition-colors cursor-pointer ${
+                    activePlan === 'standard' ? 'text-white' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Standard
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActivePlan('premium')}
+                  className={`relative z-10 flex-1 py-2 text-center text-xs font-bold rounded-xl transition-colors cursor-pointer ${
+                    activePlan === 'premium' ? 'text-white' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Premium
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2 transition-all duration-300">
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-[10px] font-mono font-bold uppercase tracking-wider">
                 <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse"></span>
-                <span>Checkout Tier</span>
+                <span>Active Tier</span>
               </div>
               <h2 className="text-2xl font-black text-white tracking-tight">{planName}</h2>
               <p className="text-xs text-slate-400 leading-relaxed">
@@ -365,7 +415,7 @@ function RegisterMerchantForm() {
                 </p>
                 {partnerDiscount && (
                   <span className="inline-block text-[11px] text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-3 py-0.5 rounded-full mt-1">
-                    Special 20% Partner Discount Applied!
+                    Special 20% Discount Applied!
                   </span>
                 )}
               </div>
@@ -455,7 +505,7 @@ function RegisterMerchantForm() {
                       required
                       name="ownerName"
                       type="text"
-                      placeholder="e.g. Ramesh Kumar"
+                      placeholder="Write your name"
                       value={form.ownerName}
                       onChange={handleChange}
                       className="w-full bg-[#070b18] border border-slate-800 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition-all"
@@ -470,7 +520,7 @@ function RegisterMerchantForm() {
                       required
                       name="businessName"
                       type="text"
-                      placeholder="e.g. Balaji Xerox & Prints"
+                      placeholder="Write your business name"
                       value={form.businessName}
                       onChange={handleChange}
                       className="w-full bg-[#070b18] border border-slate-800 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition-all"
@@ -488,7 +538,7 @@ function RegisterMerchantForm() {
                       name="mobile"
                       type="tel"
                       maxLength={10}
-                      placeholder="10-digit mobile number"
+                      placeholder="Enter your 10-digit mobile number"
                       value={form.mobile}
                       onChange={handleChange}
                       className="w-full bg-[#070b18] border border-slate-800 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none font-mono transition-all"
@@ -503,7 +553,7 @@ function RegisterMerchantForm() {
                       required
                       name="upiId"
                       type="text"
-                      placeholder="e.g. 9826xxxxxx@ybl"
+                      placeholder="Enter your UPI ID"
                       value={form.upiId}
                       onChange={handleChange}
                       className="w-full bg-[#070b18] border border-slate-800 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-xs text-emerald-400 placeholder-slate-500 focus:outline-none font-mono transition-all"
@@ -520,7 +570,7 @@ function RegisterMerchantForm() {
                       required
                       name="email"
                       type="email"
-                      placeholder="you@yourshop.com"
+                      placeholder="Enter your email address"
                       value={form.email}
                       onChange={handleChange}
                       className="w-full bg-[#070b18] border border-slate-800 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition-all"
@@ -553,17 +603,17 @@ function RegisterMerchantForm() {
                   </div>
                 </div>
 
-                {/* Referral Code Field (Optional) */}
+                {/* Referral Code Field */}
                 {!isTrial && (
                   <div className="bg-[#070b18] border border-slate-800 p-3.5 rounded-2xl space-y-2">
                     <label className="block text-[11px] font-bold uppercase tracking-wider text-indigo-300">
-                      Referral / Partner Code (Optional)
+                      Referral Code (Optional)
                     </label>
                     <div className="flex gap-2">
                       <input
                         type="text"
                         disabled={partnerDiscount}
-                        placeholder="e.g. AKASH100"
+                        placeholder="Enter referral code"
                         value={referralInput}
                         onChange={(e) => setReferralInput(e.target.value.toUpperCase())}
                         className="flex-1 bg-[#0b1021] border border-slate-700 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs text-white font-mono uppercase placeholder-slate-600 focus:outline-none disabled:opacity-50"
