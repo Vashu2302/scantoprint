@@ -12,7 +12,6 @@ const supabase = createClient(
 export default function AdminSuperDashboard() {
   const router = useRouter();
 
-  // Dynamic Browser Tab Title
   useEffect(() => {
     document.title = 'Central Admin Control • ScanToPrint';
   }, []);
@@ -27,6 +26,11 @@ export default function AdminSuperDashboard() {
   const [shops, setShops] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Partner Payout Requests State
+  const [pendingPayouts, setPendingPayouts] = useState<any[]>([]);
+  const [payoutUtrMap, setPayoutUtrMap] = useState<{ [id: string]: string }>({});
+  const [settlingPayoutId, setSettlingPayoutId] = useState<string | null>(null);
 
   // Dynamic Admin UPI Manager
   const [adminUpi, setAdminUpi] = useState('');
@@ -45,6 +49,7 @@ export default function AdminSuperDashboard() {
       setIsAuthenticated(true);
       fetchAdminData();
       fetchPlatformSettings();
+      fetchPendingPayouts();
     } else {
       setLoading(false);
     }
@@ -66,6 +71,7 @@ export default function AdminSuperDashboard() {
         setIsAuthenticated(true);
         fetchAdminData();
         fetchPlatformSettings();
+        fetchPendingPayouts();
       } else {
         setAuthError(true);
       }
@@ -96,6 +102,17 @@ export default function AdminSuperDashboard() {
     if (shopsData) setShops(shopsData);
     if (ordersData) setOrders(ordersData);
     setLoading(false);
+  };
+
+  // Fetch Pending Partner Payouts
+  const fetchPendingPayouts = async () => {
+    const { data: payoutsData } = await supabase
+      .from('partner_payouts')
+      .select('*')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+
+    if (payoutsData) setPendingPayouts(payoutsData);
   };
 
   // Fetch platform settings (Admin UPI + Drive Link)
@@ -195,7 +212,7 @@ export default function AdminSuperDashboard() {
     }
   };
 
-  // UTR SUBSCRIPTION VERIFICATION ACTIONS
+  // UTR SUBSCRIPTION VERIFICATION ACTIONS (WITH PARTNER COMMISSION AUTO-CREDIT)
   const handleApproveUtr = async (shop: any) => {
     if (!confirm(`Confirm payment received for "${shop.business_name || shop.name}" (UTR: ${shop.payment_utr})?`)) return;
 
@@ -208,13 +225,47 @@ export default function AdminSuperDashboard() {
       })
       .eq('id', shop.id);
 
-    if (!error) {
-      setShops((prev) =>
-        prev.map((s) => (s.id === shop.id ? { ...s, payment_verified: true, is_paused: false } : s))
-      );
-    } else {
+    if (error) {
       alert('Approval failed: ' + error.message);
+      return;
     }
+
+    // Auto-Credit Commission to Partner if referred
+    if (shop.referred_by_code && !shop.commission_credited) {
+      const plan = (shop.plan_type || 'standard').toLowerCase();
+      const commission = plan === 'premium' ? 150 : 100;
+
+      try {
+        const { data: partner } = await supabase
+          .from('partners')
+          .select('id, wallet_balance, total_earned')
+          .eq('referral_code', shop.referred_by_code.trim().toUpperCase())
+          .maybeSingle();
+
+        if (partner) {
+          const newWallet = Number(partner.wallet_balance || 0) + commission;
+          const newTotal = Number(partner.total_earned || 0) + commission;
+
+          await supabase
+            .from('partners')
+            .update({ wallet_balance: newWallet, total_earned: newTotal })
+            .eq('id', partner.id);
+
+          await supabase
+            .from('shops')
+            .update({ commission_credited: true })
+            .eq('id', shop.id);
+        }
+      } catch (e) {
+        console.error('Commission credit error:', e);
+      }
+    }
+
+    setShops((prev) =>
+      prev.map((s) =>
+        s.id === shop.id ? { ...s, payment_verified: true, is_paused: false, commission_credited: true } : s
+      )
+    );
   };
 
   const handleRejectUtr = async (shop: any) => {
@@ -236,6 +287,37 @@ export default function AdminSuperDashboard() {
       );
     } else {
       alert('Rejection failed: ' + error.message);
+    }
+  };
+
+  // Settle Partner Payout Request
+  const handleSettlePayout = async (payout: any) => {
+    const utr = (payoutUtrMap[payout.id] || '').trim();
+    if (utr.length < 4) {
+      alert('Please enter a valid 12-digit settlement UTR / transaction ID.');
+      return;
+    }
+
+    setSettlingPayoutId(payout.id);
+
+    try {
+      const { error } = await supabase
+        .from('partner_payouts')
+        .update({
+          status: 'paid',
+          utr_number: utr,
+          paid_at: new Date().toISOString(),
+        })
+        .eq('id', payout.id);
+
+      if (error) throw error;
+
+      setPendingPayouts((prev) => prev.filter((p) => p.id !== payout.id));
+      alert(`✓ Payout of ₹${payout.amount} marked as paid to ${payout.partner_name}!`);
+    } catch (err: any) {
+      alert('Failed to settle payout: ' + err.message);
+    } finally {
+      setSettlingPayoutId(null);
     }
   };
 
@@ -326,13 +408,15 @@ export default function AdminSuperDashboard() {
   // =========================================================================
   // SAAS SUBSCRIPTION REVENUE COMPUTATION
   // =========================================================================
-  const getPlanCost = (planType?: string, billingCycle?: string) => {
+  const getPlanCost = (planType?: string, billingCycle?: string, hasReferral?: boolean) => {
     const p = (planType || '').toLowerCase();
     const c = (billingCycle || '').toLowerCase();
     if (p === 'standard') {
+      if (hasReferral) return c === 'yearly' ? 1199 : 119;
       return c === 'yearly' ? 1499 : 149;
     }
     if (p === 'premium') {
+      if (hasReferral) return c === 'yearly' ? 1759 : 199;
       return c === 'yearly' ? 2199 : 249;
     }
     return 0; // trial is free
@@ -349,20 +433,17 @@ export default function AdminSuperDashboard() {
 
   shops.forEach((s) => {
     const p = (s.plan_type || 'trial').toLowerCase();
-    const cost = getPlanCost(p, s.billing_cycle);
+    const cost = getPlanCost(p, s.billing_cycle, Boolean(s.referred_by_code));
 
-    // If it's a paid tier with an entered or verified UTR
     if (cost > 0 && (s.payment_utr || s.payment_verified)) {
       lifetimeSaaSFees += cost;
 
-      // Check if registration / subscription started in the current calendar month
       const shopDate = s.created_at ? new Date(s.created_at) : null;
       if (shopDate && shopDate.getFullYear() === currentYear && shopDate.getMonth() === currentMonth) {
         currentMonthSaaSFees += cost;
       }
     }
 
-    // Active subscription counts
     const isPaused = Boolean(s.is_paused);
     const subEnd = s.subscription_end ? new Date(s.subscription_end) : new Date();
     const isExpired = subEnd.getTime() < Date.now();
@@ -389,7 +470,8 @@ export default function AdminSuperDashboard() {
       s.business_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.slug?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.phone?.includes(searchQuery) ||
-      s.payment_utr?.includes(searchQuery)
+      s.payment_utr?.includes(searchQuery) ||
+      s.referred_by_code?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -406,7 +488,7 @@ export default function AdminSuperDashboard() {
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Live Fleet Control, Subscription UTR Verification & Merchant Directory
+              Live Fleet Control, Partner Payouts, Subscription Verification & Directory
             </p>
           </div>
 
@@ -420,7 +502,60 @@ export default function AdminSuperDashboard() {
           </div>
         </header>
 
-        {/* PENDING UTR ALERT BOX */}
+        {/* 1. PENDING PARTNER PAYOUT REQUESTS ALERT BOX */}
+        {pendingPayouts.length > 0 && (
+          <div className="bg-gradient-to-r from-indigo-950/60 via-[#0b1021] to-[#070b18] border-2 border-indigo-500/50 rounded-2xl p-5 shadow-2xl space-y-4 animate-in fade-in duration-300">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-indigo-400 text-xl">💸</span>
+                <h2 className="text-sm font-bold text-white uppercase tracking-wider">
+                  Partner UPI Payout Requests ({pendingPayouts.length} Pending)
+                </h2>
+              </div>
+              <span className="text-[11px] text-indigo-300 font-sans">
+                Send commission via UPI app and enter settlement UTR below to confirm.
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {pendingPayouts.map((p) => (
+                <div key={p.id} className="bg-[#070b18] border border-slate-800 rounded-xl p-4 space-y-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="font-bold text-white text-xs">{p.partner_name}</h3>
+                      <p className="text-[10px] text-slate-400">Target UPI:</p>
+                      <p className="text-xs font-mono font-bold text-emerald-400 select-all">{p.partner_upi}</p>
+                    </div>
+                    <span className="text-base font-black font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg">
+                      ₹{p.amount}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <input
+                      type="text"
+                      placeholder="Enter 12-digit UTR from GPay/PhonePe"
+                      value={payoutUtrMap[p.id] || ''}
+                      onChange={(e) =>
+                        setPayoutUtrMap({ ...payoutUtrMap, [p.id]: e.target.value })
+                      }
+                      className="w-full bg-[#0b1021] border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white font-mono placeholder-slate-600 focus:outline-none focus:border-indigo-500"
+                    />
+                    <button
+                      onClick={() => handleSettlePayout(p)}
+                      disabled={settlingPayoutId === p.id}
+                      className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider rounded-lg transition-all shadow cursor-pointer"
+                    >
+                      {settlingPayoutId === p.id ? 'Settling...' : '✓ Mark Paid & Settle'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 2. PENDING SHOP UTR ALERT BOX */}
         {pendingUtrShops.length > 0 && (
           <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-5 shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
@@ -442,6 +577,11 @@ export default function AdminSuperDashboard() {
                     <div>
                       <h3 className="font-bold text-white text-xs">{ps.business_name || ps.name}</h3>
                       <p className="text-[10px] text-slate-400">{ps.owner_name} • {ps.phone}</p>
+                      {ps.referred_by_code && (
+                        <p className="text-[10px] text-indigo-400 font-mono mt-0.5">
+                          Code: {ps.referred_by_code} (+₹{ps.plan_type === 'premium' ? 150 : 100} Commission)
+                        </p>
+                      )}
                     </div>
                     <span className="text-[9px] font-mono font-bold uppercase px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                       {ps.plan_type || 'STANDARD'}
@@ -562,12 +702,9 @@ export default function AdminSuperDashboard() {
 
         </div>
 
-        {/* ========================================================================= */}
-        {/* REFINED SAAS SUBSCRIPTION REVENUE & ACTIVE METRICS CARDS                  */}
-        {/* ========================================================================= */}
+        {/* METRIC CARDS */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           
-          {/* CARD 1: THIS MONTH'S SUBSCRIPTION EARNINGS */}
           <div className="bg-[#0b1021] border border-emerald-500/30 rounded-2xl p-4 shadow-lg">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
               This Month&apos;s SaaS Revenue
@@ -580,7 +717,6 @@ export default function AdminSuperDashboard() {
             </p>
           </div>
 
-          {/* CARD 2: LIFETIME SUBSCRIPTION EARNINGS */}
           <div className="bg-[#0b1021] border border-indigo-500/30 rounded-2xl p-4 shadow-lg">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
               Lifetime SaaS Revenue
@@ -593,7 +729,6 @@ export default function AdminSuperDashboard() {
             </p>
           </div>
 
-          {/* CARD 3: ACTIVE PAID SUBSCRIBERS */}
           <div className="bg-[#0b1021] border border-slate-800 rounded-2xl p-4 shadow-lg">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
               Active Paid Subscribers
@@ -606,7 +741,6 @@ export default function AdminSuperDashboard() {
             </p>
           </div>
 
-          {/* CARD 4: TOTAL SHOPS & ONLINE NODES */}
           <div className="bg-[#0b1021] border border-slate-800 rounded-2xl p-4 shadow-lg">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
               Fleet Network Status
@@ -628,7 +762,7 @@ export default function AdminSuperDashboard() {
             <h2 className="text-xs font-bold text-white uppercase tracking-wider">Registered Partner Counters</h2>
             <input
               type="text"
-              placeholder="Search by store name, slug, phone or UTR..."
+              placeholder="Search by store name, slug, phone, UTR or Referral Code..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="bg-[#070b18] border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 w-full max-w-xs font-mono"
@@ -641,6 +775,7 @@ export default function AdminSuperDashboard() {
                 <tr className="bg-[#070b18] text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-800">
                   <th className="p-3.5">Store Details</th>
                   <th className="p-3.5">Plan & UTR Verification</th>
+                  <th className="p-3.5">Referral Partner</th>
                   <th className="p-3.5">Counter Telemetry</th>
                   <th className="p-3.5">Credentials</th>
                   <th className="p-3.5">Subscription Lock</th>
@@ -715,7 +850,6 @@ export default function AdminSuperDashboard() {
                             )}
                           </div>
 
-                          {/* UTR Details / Plan Condition */}
                           {s.payment_utr ? (
                             <div className="space-y-1">
                               <div className="text-[10px] font-mono text-slate-300 bg-slate-900 px-2 py-1 rounded border border-slate-800 flex items-center justify-between gap-1">
@@ -751,6 +885,28 @@ export default function AdminSuperDashboard() {
                             </span>
                           )}
                         </div>
+                      </td>
+
+                      {/* Referral Partner Column */}
+                      <td className="p-3.5">
+                        {s.referred_by_code ? (
+                          <div className="space-y-1">
+                            <span className="font-mono text-xs font-bold text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded block w-fit">
+                              {s.referred_by_code}
+                            </span>
+                            {s.commission_credited ? (
+                              <span className="text-[10px] text-emerald-400 font-bold block">
+                                ✓ Commission Paid
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-amber-400 font-semibold block">
+                                ⏳ Pending Approval
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-slate-600 text-[11px]">Direct Organic</span>
+                        )}
                       </td>
 
                       {/* Online Status */}

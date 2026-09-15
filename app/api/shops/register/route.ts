@@ -17,6 +17,7 @@ export async function POST(req: Request) {
       upiId,
       planType = 'trial',
       billingCycle = 'monthly',
+      referredByCode = null,
     } = await req.json();
 
     // Basic validation
@@ -65,6 +66,8 @@ export async function POST(req: Request) {
     const calculatedEndDate = new Date();
     calculatedEndDate.setDate(calculatedEndDate.getDate() + durationDays);
 
+    const cleanReferralCode = referredByCode ? String(referredByCode).trim().toUpperCase() : null;
+
     // Insert record into Supabase shops table
     const { data: newShop, error } = await supabase
       .from('shops')
@@ -84,6 +87,8 @@ export async function POST(req: Request) {
           subscription_end: calculatedEndDate.toISOString(),
           page_limit: pageLimit,
           monthly_pages_printed: 0,
+          referred_by_code: cleanReferralCode,
+          commission_credited: false,
         },
       ])
       .select()

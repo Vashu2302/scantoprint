@@ -38,16 +38,24 @@ export default function HomePage() {
           <a href="#workflow" className="hover:text-white transition-colors">How It Works</a>
           <a href="#features" className="hover:text-white transition-colors">Features</a>
           <a href="#plans" className="hover:text-white transition-colors">Plans</a>
+          <a href="#partner" className="hover:text-indigo-400 text-indigo-300 font-semibold transition-colors">Partner Program</a>
           <a href="#testimonials" className="hover:text-white transition-colors">Testimonials</a>
           <a href="#faq" className="hover:text-white transition-colors">Help & Support</a>
         </nav>
 
         <div className="flex items-center gap-3">
           <Link
+            href="/partner/login"
+            className="text-xs font-semibold px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-indigo-400 hover:text-white border border-indigo-500/30 transition-all flex items-center gap-1.5"
+          >
+            <span>🤝</span>
+            <span className="hidden sm:inline">Partner</span> Login
+          </Link>
+          <Link
             href="/login"
             className="text-xs font-bold px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white transition-all shadow-md shadow-indigo-600/25"
           >
-            Login
+            Shop Login
           </Link>
         </div>
       </header>
@@ -416,6 +424,59 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* NEW: PARTNER & CAMPUS AMBASSADOR SECTION */}
+      <section id="partner" className="max-w-6xl mx-auto px-6 py-16 scroll-mt-16">
+        <div className="bg-gradient-to-r from-indigo-950/70 via-[#0e1628] to-[#070b18] border-2 border-indigo-500/40 rounded-3xl p-8 sm:p-12 shadow-2xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 -mt-8 -mr-8 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center relative z-10">
+            <div className="lg:col-span-8 space-y-4">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-[11px] font-bold uppercase tracking-wider">
+                <span>🤝</span>
+                <span>Campus & Ground Partner Program</span>
+              </div>
+              <h2 className="text-2xl sm:text-4xl font-black text-white tracking-tight leading-tight">
+                Earn ₹100 to ₹150 for Every Print Shop You Onboard
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed max-w-2xl">
+                Are you a college student or local field champion? Get your custom promo code, digitize photocopy shops in your university or locality, give them an instant <strong className="text-emerald-400">20% discount</strong>, and withdraw earnings directly to your UPI ID.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+                <div className="bg-[#070b18]/80 border border-slate-800 p-3.5 rounded-2xl">
+                  <div className="text-emerald-400 font-bold text-sm">1. Get Promo Code</div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Instant free registration and unique 6-digit code.</p>
+                </div>
+                <div className="bg-[#070b18]/80 border border-slate-800 p-3.5 rounded-2xl">
+                  <div className="text-indigo-400 font-bold text-sm">2. Offer 20% OFF</div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Shopkeepers get ₹119/₹199 rate on first month.</p>
+                </div>
+                <div className="bg-[#070b18]/80 border border-slate-800 p-3.5 rounded-2xl">
+                  <div className="text-amber-400 font-bold text-sm">3. Direct UPI Cash</div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">₹100–₹150 credited directly to your bank account.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="lg:col-span-4 flex flex-col gap-3 justify-center text-center">
+              <Link
+                href="/partner/register"
+                className="w-full py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-500 font-black text-xs uppercase tracking-wider text-white shadow-xl shadow-indigo-600/30 transition-all hover:scale-[1.02] text-center"
+              >
+                Become a Partner (Free) 🚀
+              </Link>
+              <Link
+                href="/partner/login"
+                className="w-full py-3 rounded-2xl bg-slate-900/90 border border-slate-800 hover:bg-slate-800 text-xs font-bold text-slate-300 transition-all text-center"
+              >
+                Partner Dashboard Login →
+              </Link>
+              <span className="text-[10px] text-slate-500">Zero investment • Real-time tracking</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* 4. Reviews */}
       <section id="testimonials" className="max-w-6xl mx-auto px-6 py-16 space-y-8">
         <div className="text-center space-y-2">
@@ -480,7 +541,7 @@ export default function HomePage() {
           <div className="p-5 rounded-2xl bg-[#0e1626]/70 border border-slate-800 space-y-2">
             <h3 className="text-sm font-bold text-white">How do I access my Dashboard?</h3>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Click the &apos;Login&apos; button in the top-right corner, enter your credentials, and you will be redirected instantly to your control panel.
+              Click the &apos;Shop Login&apos; button in the top-right corner, enter your credentials, and you will be redirected instantly to your control panel.
             </p>
           </div>
         </div>

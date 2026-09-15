@@ -26,6 +26,13 @@ function RegisterMerchantForm() {
   const [utrNumber, setUtrNumber] = useState<string>('');
   const [submittingUtr, setSubmittingUtr] = useState<boolean>(false);
 
+  // Referral / Partner Promo Code State
+  const [referralInput, setReferralInput] = useState<string>('');
+  const [appliedCode, setAppliedCode] = useState<string>('');
+  const [partnerDiscount, setPartnerDiscount] = useState<boolean>(false);
+  const [checkingCode, setCheckingCode] = useState<boolean>(false);
+  const [promoMessage, setPromoMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
   const [form, setForm] = useState({
     ownerName: '',
     businessName: '',
@@ -63,6 +70,59 @@ function RegisterMerchantForm() {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
+  // Verify Partner Code
+  const handleApplyReferral = async () => {
+    setPromoMessage(null);
+    const cleanCode = referralInput.trim().toUpperCase();
+
+    if (!cleanCode) {
+      setPromoMessage({ type: 'error', text: 'Please enter a referral code to apply.' });
+      return;
+    }
+
+    setCheckingCode(true);
+
+    try {
+      const { data: partner, error } = await supabase
+        .from('partners')
+        .select('id, full_name, referral_code, is_active')
+        .eq('referral_code', cleanCode)
+        .maybeSingle();
+
+      if (error || !partner) {
+        setAppliedCode('');
+        setPartnerDiscount(false);
+        setPromoMessage({ type: 'error', text: 'Invalid referral code. Please check and retry.' });
+        return;
+      }
+
+      if (!partner.is_active) {
+        setAppliedCode('');
+        setPartnerDiscount(false);
+        setPromoMessage({ type: 'error', text: 'This partner code is inactive.' });
+        return;
+      }
+
+      setAppliedCode(partner.referral_code);
+      setPartnerDiscount(true);
+      setPromoMessage({
+        type: 'success',
+        text: `🎉 Code ${partner.referral_code} Applied! 20% Special Partner Discount unlocked.`
+      });
+    } catch (err: any) {
+      setPromoMessage({ type: 'error', text: 'Error verifying code.' });
+    } finally {
+      setCheckingCode(false);
+    }
+  };
+
+  const handleRemoveCode = () => {
+    setAppliedCode('');
+    setPartnerDiscount(false);
+    setReferralInput('');
+    setPromoMessage(null);
+  };
+
   const isPremium = planParam === 'premium';
   const isStandard = planParam === 'standard';
   const isTrial = !isPremium && !isStandard;
@@ -73,17 +133,27 @@ function RegisterMerchantForm() {
     ? 'Standard Plan'
     : '7-Day Free Trial';
 
-  const planNumericAmount = isPremium
+  // Base pricing
+  const baseNumericAmount = isPremium
     ? cycleParam === 'yearly' ? 2199 : 249
     : isStandard
     ? cycleParam === 'yearly' ? 1499 : 149
     : 0;
 
-  const planCost = isPremium
+  // 20% Discounted Pricing if partner code is applied
+  const planNumericAmount = partnerDiscount && !isTrial
+    ? isPremium
+      ? cycleParam === 'yearly' ? 1759 : 199 // 20% off
+      : cycleParam === 'yearly' ? 1199 : 119 // 20% off
+    : baseNumericAmount;
+
+  const planCost = isTrial
+    ? '₹0 (100% Free)'
+    : partnerDiscount
+    ? `₹${planNumericAmount} (20% OFF applied)`
+    : isPremium
     ? cycleParam === 'yearly' ? '₹2,199 / yr' : '₹249 / mo'
-    : isStandard
-    ? cycleParam === 'yearly' ? '₹1,499 / yr' : '₹149 / mo'
-    : '₹0 (100% Free)';
+    : cycleParam === 'yearly' ? '₹1,499 / yr' : '₹149 / mo';
 
   const planQuota = isPremium
     ? 'Unlimited Pages & Priority Spool'
@@ -106,7 +176,8 @@ function RegisterMerchantForm() {
         body: JSON.stringify({
           ...form,
           planType: planParam,
-          billingCycle: cycleParam
+          billingCycle: cycleParam,
+          referredByCode: appliedCode || null
         })
       });
 
@@ -136,7 +207,7 @@ function RegisterMerchantForm() {
     }
   };
 
-  // Synchronous Await UTR submission: DB me save hone ke baad hi redirect karega
+  // Synchronous Await UTR submission
   const handleUtrSubmitAndRedirect = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!registeredShop) {
@@ -185,10 +256,8 @@ function RegisterMerchantForm() {
         localStorage.setItem('stp_merchant_shop', JSON.stringify(updatedShop));
       }
 
-      // Safe redirect after successful write
       window.location.replace(`/dashboard/${registeredShop.slug}`);
     } catch (err: any) {
-      // Last-ditch direct DB update
       try {
         await supabase
           .from('shops')
@@ -210,6 +279,7 @@ function RegisterMerchantForm() {
 
       <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10">
         
+        {/* Left Card: Summary */}
         <div className="lg:col-span-5 bg-gradient-to-b from-[#0b1021] to-[#070b18] border border-slate-800 rounded-3xl p-6 sm:p-8 flex flex-col justify-between shadow-2xl relative overflow-hidden">
           <div className="absolute -top-16 -right-16 w-36 h-36 bg-indigo-500/10 rounded-full blur-2xl"></div>
 
@@ -233,7 +303,14 @@ function RegisterMerchantForm() {
             <div className="bg-[#0e1628]/90 border border-indigo-500/30 rounded-2xl p-4 space-y-3">
               <div className="flex justify-between items-baseline">
                 <span className="text-xs font-semibold text-slate-400">Total Billed:</span>
-                <span className="text-lg font-black text-emerald-400 font-mono">{planCost}</span>
+                <div className="text-right">
+                  {partnerDiscount && !isTrial && (
+                    <span className="text-xs line-through text-slate-500 block font-mono">
+                      ₹{baseNumericAmount}
+                    </span>
+                  )}
+                  <span className="text-lg font-black text-emerald-400 font-mono">{planCost}</span>
+                </div>
               </div>
               <div className="text-[11px] text-indigo-300 font-mono bg-indigo-950/40 p-2 rounded-xl border border-indigo-500/20 flex items-center gap-2">
                 <span>⚡</span>
@@ -272,6 +349,7 @@ function RegisterMerchantForm() {
           </div>
         </div>
 
+        {/* Right Form Card */}
         <div className="lg:col-span-7 bg-[#0b1021]/90 backdrop-blur-xl border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
           {step === 'payment' && registeredShop ? (
             <div className="space-y-6 text-center animate-in fade-in duration-300">
@@ -285,6 +363,11 @@ function RegisterMerchantForm() {
                 <p className="text-xs text-slate-400">
                   Scan and pay <b className="text-emerald-400">₹{planNumericAmount}</b> via any UPI app. Enter UTR to unlock your dashboard instantly.
                 </p>
+                {partnerDiscount && (
+                  <span className="inline-block text-[11px] text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-3 py-0.5 rounded-full mt-1">
+                    Special 20% Partner Discount Applied!
+                  </span>
+                )}
               </div>
 
               <div className="bg-white rounded-3xl p-4 shadow-xl text-slate-900 space-y-2 inline-block mx-auto">
@@ -469,6 +552,53 @@ function RegisterMerchantForm() {
                     </div>
                   </div>
                 </div>
+
+                {/* Referral Code Field (Optional) */}
+                {!isTrial && (
+                  <div className="bg-[#070b18] border border-slate-800 p-3.5 rounded-2xl space-y-2">
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-indigo-300">
+                      Referral / Partner Code (Optional)
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        disabled={partnerDiscount}
+                        placeholder="e.g. AKASH100"
+                        value={referralInput}
+                        onChange={(e) => setReferralInput(e.target.value.toUpperCase())}
+                        className="flex-1 bg-[#0b1021] border border-slate-700 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs text-white font-mono uppercase placeholder-slate-600 focus:outline-none disabled:opacity-50"
+                      />
+                      {partnerDiscount ? (
+                        <button
+                          type="button"
+                          onClick={handleRemoveCode}
+                          className="px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 font-bold text-xs rounded-xl transition-all cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={checkingCode || !referralInput.trim()}
+                          onClick={handleApplyReferral}
+                          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md cursor-pointer"
+                        >
+                          {checkingCode ? 'Checking...' : 'Apply Code'}
+                        </button>
+                      )}
+                    </div>
+
+                    {promoMessage && (
+                      <p
+                        className={`text-[11px] ${
+                          promoMessage.type === 'success' ? 'text-emerald-400 font-medium' : 'text-rose-400'
+                        }`}
+                      >
+                        {promoMessage.text}
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 <div className="pt-2">
                   <button
