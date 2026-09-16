@@ -8,8 +8,8 @@ export default function HomePage() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [selectedPlan, setSelectedPlan] = useState<'trial' | 'standard' | 'premium'>('standard');
 
-  // Mouse Glow Movement Tracker
-  const [cursorPos, setCursorPos] = useState({ x: -200, y: -200 });
+  // Mouse Glow Spotlight Tracker
+  const [cursorPos, setCursorPos] = useState({ x: -400, y: -400 });
 
   useEffect(() => {
     document.title = 'ScanToPrint • Instant Cloud Document Printing';
@@ -32,9 +32,12 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-[#070b14] text-slate-100 selection:bg-indigo-500 selection:text-white scroll-smooth relative overflow-hidden">
-      {/* Enhanced Interactive Mouse Glow Spotlight */}
+      
+      {/* ------------------------------------------------------------- */}
+      {/* VIBRANT & SMOOTH MOUSE AMBIENT GLOW SPOTLIGHT (BEHIND CONTENT) */}
+      {/* ------------------------------------------------------------- */}
       <div
-        className="pointer-events-none fixed -translate-x-1/2 -translate-y-1/2 w-[420px] h-[420px] rounded-full bg-gradient-to-r from-indigo-500/20 via-cyan-500/15 to-purple-600/20 blur-[110px] z-30 transition-transform duration-75 ease-out"
+        className="pointer-events-none fixed -translate-x-1/2 -translate-y-1/2 w-[480px] h-[480px] rounded-full bg-gradient-to-r from-indigo-500/25 via-cyan-400/20 to-purple-600/25 blur-[120px] z-10 transition-transform duration-75 ease-out"
         style={{
           left: `${cursorPos.x}px`,
           top: `${cursorPos.y}px`,
@@ -81,7 +84,7 @@ export default function HomePage() {
       </header>
 
       {/* Hero Section */}
-      <section className="max-w-5xl mx-auto px-6 pt-20 pb-16 text-center space-y-6">
+      <section className="max-w-5xl mx-auto px-6 pt-20 pb-16 text-center space-y-6 relative z-20">
         <h1 className="text-4xl sm:text-6xl font-black tracking-tight leading-tight">
           <span className="text-white block">
             Automated Document Printing
@@ -113,13 +116,13 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 1. End-to-End Visual Workflow & Animated Engine */}
-      <section id="workflow" className="max-w-6xl mx-auto px-6 py-16 scroll-mt-16">
+      {/* 1. End-to-End Visual Workflow (Both Customer & Shopkeeper Flows) */}
+      <section id="workflow" className="max-w-6xl mx-auto px-6 py-16 scroll-mt-16 relative z-20">
         <InteractiveWorkflow />
       </section>
 
       {/* 2. Smart Cloud Features */}
-      <section id="features" className="max-w-6xl mx-auto px-6 py-16 space-y-8">
+      <section id="features" className="max-w-6xl mx-auto px-6 py-16 space-y-8 relative z-20">
         <div className="text-center space-y-2">
           <h2 className="text-2xl sm:text-3xl font-black text-white">Smart Cloud Features & Automation</h2>
           <p className="text-xs sm:text-sm text-slate-400">
@@ -161,7 +164,7 @@ export default function HomePage() {
       </section>
 
       {/* 3. Transparent Pricing */}
-      <section id="plans" className="max-w-6xl mx-auto px-6 py-20 space-y-10 scroll-mt-16">
+      <section id="plans" className="max-w-6xl mx-auto px-6 py-20 space-y-10 scroll-mt-16 relative z-20">
         <div className="text-center space-y-3">
           <span className="text-[11px] font-bold text-indigo-400 uppercase tracking-widest bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/20">
             Transparent Pricing
@@ -398,7 +401,7 @@ export default function HomePage() {
       </section>
 
       {/* PARTNER & CAMPUS AMBASSADOR SECTION */}
-      <section id="partner" className="max-w-6xl mx-auto px-6 py-16 scroll-mt-16">
+      <section id="partner" className="max-w-6xl mx-auto px-6 py-16 scroll-mt-16 relative z-20">
         <div className="bg-gradient-to-r from-indigo-950/70 via-[#0e1628] to-[#070b18] border-2 border-indigo-500/40 rounded-3xl p-8 sm:p-12 shadow-2xl relative overflow-hidden">
           <div className="absolute top-0 right-0 -mt-8 -mr-8 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
@@ -451,7 +454,7 @@ export default function HomePage() {
       </section>
 
       {/* 4. Reviews */}
-      <section id="testimonials" className="max-w-6xl mx-auto px-6 py-16 space-y-8">
+      <section id="testimonials" className="max-w-6xl mx-auto px-6 py-16 space-y-8 relative z-20">
         <div className="text-center space-y-2">
           <h2 className="text-2xl sm:text-3xl font-black text-white">Customer Reviews & Testimonials</h2>
           <p className="text-xs sm:text-sm text-slate-400">
@@ -495,7 +498,7 @@ export default function HomePage() {
       </section>
 
       {/* 5. Help & Support */}
-      <section id="faq" className="max-w-4xl mx-auto px-6 py-16 space-y-6">
+      <section id="faq" className="max-w-4xl mx-auto px-6 py-16 space-y-6 relative z-20">
         <div className="text-center space-y-2 mb-8">
           <h2 className="text-2xl sm:text-3xl font-black text-white">Help & Support Details</h2>
           <p className="text-xs sm:text-sm text-slate-400">
@@ -521,7 +524,7 @@ export default function HomePage() {
       </section>
 
       {/* Footer with Legal Link */}
-      <footer className="border-t border-slate-800/80 py-8 px-6 text-center text-xs text-slate-500 space-y-2">
+      <footer className="border-t border-slate-800/80 py-8 px-6 text-center text-xs text-slate-500 space-y-2 relative z-20">
         <div>
           © 2026 ScanToPrint.in. All rights reserved. Automated Cloud Printing System.
         </div>
