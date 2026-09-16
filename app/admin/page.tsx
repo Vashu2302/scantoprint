@@ -215,9 +215,17 @@ export default function AdminSuperDashboard() {
     }
   };
 
-  // UTR Shop Approval & Partner Commission Auto-Credit
+  // UTR Shop Approval & Partner Commission Auto-Credit + 28 Days Auto-Extension
   const handleApproveUtr = async (shop: any) => {
-    if (!confirm(`Confirm payment received for "${shop.business_name || shop.name}" (UTR: ${shop.payment_utr})?`)) return;
+    const planType = (shop.plan_type || 'standard').toUpperCase();
+    const expectedAmt = planType === 'PREMIUM' ? 249 : 149;
+
+    if (!confirm(`Confirm payment of ₹${expectedAmt} received for "${shop.business_name || shop.name}" (UTR: ${shop.payment_utr})?\n\nThis will add +28 days to the store's subscription.`)) return;
+
+    // Calculate Extended Subscription Date (+28 Days)
+    const currentEnd = shop.subscription_end ? new Date(shop.subscription_end) : new Date();
+    const baseDate = currentEnd.getTime() > Date.now() ? currentEnd : new Date();
+    const newEndDate = new Date(baseDate.getTime() + 28 * 24 * 60 * 60 * 1000);
 
     const { error } = await supabase
       .from('shops')
@@ -225,6 +233,7 @@ export default function AdminSuperDashboard() {
         payment_verified: true,
         subscription_status: 'active',
         is_paused: false,
+        subscription_end: newEndDate.toISOString(),
       })
       .eq('id', shop.id);
 
@@ -233,9 +242,9 @@ export default function AdminSuperDashboard() {
       return;
     }
 
+    // Auto-credit Partner Commission if referred
     if (shop.referred_by_code && !shop.commission_credited) {
-      const plan = (shop.plan_type || 'standard').toLowerCase();
-      const commission = plan === 'premium' ? 150 : 100;
+      const commission = planType === 'PREMIUM' ? 150 : 100;
 
       try {
         const { data: partner } = await supabase
@@ -273,27 +282,33 @@ export default function AdminSuperDashboard() {
 
     setShops((prev) =>
       prev.map((s) =>
-        s.id === shop.id ? { ...s, payment_verified: true, is_paused: false, commission_credited: true } : s
+        s.id === shop.id
+          ? {
+              ...s,
+              payment_verified: true,
+              is_paused: false,
+              commission_credited: true,
+              subscription_end: newEndDate.toISOString(),
+            }
+          : s
       )
     );
   };
 
   const handleRejectUtr = async (shop: any) => {
-    if (!confirm(`REJECT payment for "${shop.business_name || shop.name}"? This will pause their shop immediately.`)) return;
+    if (!confirm(`REJECT payment for "${shop.business_name || shop.name}"? This will clear the submitted UTR.`)) return;
 
     const { error } = await supabase
       .from('shops')
       .update({
         payment_verified: false,
-        subscription_status: 'suspended',
-        is_paused: true,
-        agent_status: 'paused',
+        payment_utr: null,
       })
       .eq('id', shop.id);
 
     if (!error) {
       setShops((prev) =>
-        prev.map((s) => (s.id === shop.id ? { ...s, is_paused: true, subscription_status: 'suspended' } : s))
+        prev.map((s) => (s.id === shop.id ? { ...s, payment_utr: null, payment_verified: false } : s))
       );
     } else {
       alert('Rejection failed: ' + error.message);
@@ -366,7 +381,7 @@ export default function AdminSuperDashboard() {
   const handleToggleShopPause = async (shop: any) => {
     const willPause = !shop.is_paused;
     const confirmMsg = willPause
-      ? `Are you sure you want to PAUSE store "${shop.business_name || shop.name}"? Their agent and customer portal will be hard-locked immediately.`
+      ? `Are you sure you want to PAUSE store "${shop.business_name || shop.name}"? Their agent and customer portal will be locked immediately.`
       : `Resume subscription for store "${shop.business_name || shop.name}"?`;
 
     if (!confirm(confirmMsg)) return;
@@ -598,8 +613,6 @@ export default function AdminSuperDashboard() {
 
                 return (
                   <div key={p.id} className="bg-[#070b18] border border-slate-800 rounded-2xl p-4 flex flex-col justify-between gap-3 shadow-lg">
-                    
-                    {/* Upper row: Details + Mini Scan QR */}
                     <div className="flex items-start justify-between gap-3">
                       <div className="space-y-1">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Agent</span>
@@ -612,7 +625,6 @@ export default function AdminSuperDashboard() {
                         </div>
                       </div>
 
-                      {/* Mini QR Code Box for Camera Scan */}
                       <div className="bg-white p-1.5 rounded-xl shadow text-center shrink-0">
                         <img
                           src={payoutQrUrl}
@@ -625,7 +637,6 @@ export default function AdminSuperDashboard() {
                       </div>
                     </div>
 
-                    {/* Lower row: Enter UTR & Confirm */}
                     <div className="space-y-2 pt-2 border-t border-slate-800/80">
                       <input
                         type="text"
@@ -651,7 +662,7 @@ export default function AdminSuperDashboard() {
           </div>
         )}
 
-        {/* 2. PENDING SHOP UTR ALERT BOX */}
+        {/* 2. PENDING SHOP UTR ALERT BOX (WITH EXACT AMOUNT, PLAN & ACTION CONTEXT) */}
         {pendingUtrShops.length > 0 && (
           <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-5 shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
@@ -662,51 +673,78 @@ export default function AdminSuperDashboard() {
                 </h2>
               </div>
               <span className="text-[11px] text-amber-200/70 font-sans">
-                Match these 12-digit UTR numbers in your PhonePe / GPay bank statement.
+                Match these 12-digit UTR numbers in your bank statement.
               </span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {pendingUtrShops.map((ps) => (
-                <div key={ps.id} className="bg-[#070b18] border border-slate-800 rounded-xl p-4 space-y-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="font-bold text-white text-xs">{ps.business_name || ps.name}</h3>
-                      <p className="text-[10px] text-slate-400">{ps.owner_name} • {ps.phone}</p>
-                      {ps.referred_by_code && (
-                        <p className="text-[10px] text-indigo-400 font-mono mt-0.5">
-                          Code: {ps.referred_by_code} (+₹{ps.plan_type === 'premium' ? 150 : 100} Commission)
-                        </p>
-                      )}
+              {pendingUtrShops.map((ps) => {
+                const planType = (ps.plan_type || 'standard').toUpperCase();
+                const expectedAmt = planType === 'PREMIUM' ? 249 : 149;
+                const isRenewal = Boolean(ps.subscription_end && new Date(ps.subscription_end).getTime() > 0);
+
+                return (
+                  <div key={ps.id} className="bg-[#070b18] border border-slate-800 rounded-xl p-4 space-y-3 relative overflow-hidden">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="font-bold text-white text-xs">{ps.business_name || ps.name}</h3>
+                        <p className="text-[10px] text-slate-400">{ps.owner_name} • {ps.phone}</p>
+                        {ps.referred_by_code && (
+                          <p className="text-[10px] text-indigo-400 font-mono mt-0.5">
+                            Code: {ps.referred_by_code} (+₹{planType === 'PREMIUM' ? 150 : 100} Comm.)
+                          </p>
+                        )}
+                      </div>
+                      
+                      {/* Price & Plan Tag */}
+                      <div className="text-right">
+                        <span className={`text-[9px] font-mono font-bold uppercase px-2 py-0.5 rounded border inline-block ${
+                          planType === 'PREMIUM'
+                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                            : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
+                        }`}>
+                          {planType}
+                        </span>
+                        <div className="text-base font-black font-mono text-emerald-400 pt-0.5">
+                          ₹{expectedAmt}
+                        </div>
+                      </div>
                     </div>
-                    <span className="text-[9px] font-mono font-bold uppercase px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                      {ps.plan_type || 'STANDARD'}
-                    </span>
-                  </div>
 
-                  <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800 space-y-1">
-                    <span className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider">Submitted UTR Ref</span>
-                    <span className="font-mono text-xs font-black text-amber-400 select-all block tracking-widest">
-                      {ps.payment_utr}
-                    </span>
-                  </div>
+                    {/* Context Tag: Renewal or New Activation */}
+                    <div className="flex items-center justify-between text-[10px] px-2.5 py-1 bg-slate-900/60 rounded border border-slate-800">
+                      <span className="text-slate-400">Action:</span>
+                      <span className="font-bold text-indigo-300">
+                        {isRenewal ? 'Plan Renewal / Quota Top-Up (+28 Days)' : 'New Merchant Activation'}
+                      </span>
+                    </div>
 
-                  <div className="flex items-center gap-2 pt-1">
-                    <button
-                      onClick={() => handleApproveUtr(ps)}
-                      className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] rounded-lg transition-all shadow cursor-pointer"
-                    >
-                      ✓ Verify & Approve
-                    </button>
-                    <button
-                      onClick={() => handleRejectUtr(ps)}
-                      className="px-3 py-1.5 bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/30 font-bold text-[11px] rounded-lg transition-all cursor-pointer"
-                    >
-                      ✕ Reject
-                    </button>
+                    <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800 space-y-1">
+                      <span className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider">
+                        Submitted UTR Ref
+                      </span>
+                      <span className="font-mono text-xs font-black text-amber-400 select-all block tracking-widest">
+                        {ps.payment_utr}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        onClick={() => handleApproveUtr(ps)}
+                        className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] rounded-lg transition-all shadow cursor-pointer"
+                      >
+                        ✓ Verify & Approve (+28D)
+                      </button>
+                      <button
+                        onClick={() => handleRejectUtr(ps)}
+                        className="px-3 py-1.5 bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/30 font-bold text-[11px] rounded-lg transition-all cursor-pointer"
+                      >
+                        ✕ Reject
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -1005,7 +1043,7 @@ export default function AdminSuperDashboard() {
                                         onClick={() => handleApproveUtr(s)}
                                         className="text-[10px] bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded font-bold transition-all cursor-pointer"
                                       >
-                                        ✓ Approve
+                                        ✓ Approve (+28D)
                                       </button>
                                       <button
                                         onClick={() => handleRejectUtr(s)}
@@ -1113,8 +1151,6 @@ export default function AdminSuperDashboard() {
         {/* ========================================================================= */}
         {adminView === 'agents' && (
           <div className="space-y-6 animate-in fade-in duration-200">
-            
-            {/* 4 AGENT METRICS CARDS */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-[#0b1021] border border-emerald-500/30 rounded-2xl p-4 shadow-lg">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
@@ -1166,7 +1202,6 @@ export default function AdminSuperDashboard() {
               </div>
             </div>
 
-            {/* AGENTS DIRECTORY TABLE */}
             <div className="bg-[#0b1021] border border-slate-800 rounded-3xl overflow-hidden shadow-2xl p-5 sm:p-6 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-xs font-bold text-white uppercase tracking-wider">

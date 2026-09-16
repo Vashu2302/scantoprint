@@ -339,7 +339,7 @@ export default function VashuExactMerchantDashboard() {
   // Renew Modal Amount Calculation
   const renewAmount = selectedRenewPlan === 'premium' ? 249 : 149;
   const renewDeepLink = `upi://pay?pa=${adminUpi}&pn=ScanToPrint%20Platform&am=${renewAmount}&cu=INR&tn=STP%20${selectedRenewPlan.toUpperCase()}%20Renew`;
-  const renewQrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(renewDeepLink)}`;
+  const renewQrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(renewDeepLink)}`;
 
   return (
     <div className="min-h-screen bg-[#060813] text-slate-200 font-sans selection:bg-indigo-600 selection:text-white pb-12">
@@ -862,22 +862,22 @@ export default function VashuExactMerchantDashboard() {
               </div>
             </div>
 
-            {/* UPI QR & Intent Payment Card */}
-            <div className="bg-[#070b18] border border-slate-800 rounded-2xl p-4 text-center space-y-3">
-              <div className="bg-white p-2 rounded-2xl inline-block mx-auto shadow-md">
+            {/* UPI QR & Intent Payment Card (CLEANED - NO RAW UPI ID DISPLAYED) */}
+            <div className="bg-[#070b18] border border-slate-800 rounded-2xl p-5 text-center space-y-3">
+              <div className="bg-white p-2.5 rounded-2xl inline-block mx-auto shadow-md">
                 <img
                   src={renewQrSrc}
-                  alt="Admin Renewal QR"
-                  className="w-36 h-36 mx-auto object-contain"
+                  alt="Scan to Pay Admin"
+                  className="w-44 h-44 mx-auto object-contain"
                 />
               </div>
 
-              <div className="space-y-1">
-                <span className="text-xs font-mono text-slate-300 block">
-                  Pay to Admin UPI: <b className="text-emerald-400">{adminUpi}</b>
+              <div className="space-y-0.5">
+                <span className="text-base font-black font-mono text-emerald-400 block">
+                  Payable Amount: ₹{renewAmount}
                 </span>
-                <span className="text-base font-black font-mono text-white block">
-                  Amount: ₹{renewAmount}
+                <span className="text-[10px] text-slate-400">
+                  Scan the QR directly or tap below to open PhonePe / GPay
                 </span>
               </div>
 
