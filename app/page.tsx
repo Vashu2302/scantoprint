@@ -32,9 +32,9 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-[#070b14] text-slate-100 selection:bg-indigo-500 selection:text-white scroll-smooth relative overflow-hidden">
-      {/* Interactive Mouse Glow Spotlight Effect */}
+      {/* Enhanced Interactive Mouse Glow Spotlight */}
       <div
-        className="pointer-events-none fixed -translate-x-1/2 -translate-y-1/2 w-[350px] h-[350px] rounded-full bg-indigo-600/10 blur-[100px] z-30 transition-transform duration-75 ease-out"
+        className="pointer-events-none fixed -translate-x-1/2 -translate-y-1/2 w-[420px] h-[420px] rounded-full bg-gradient-to-r from-indigo-500/20 via-cyan-500/15 to-purple-600/20 blur-[110px] z-30 transition-transform duration-75 ease-out"
         style={{
           left: `${cursorPos.x}px`,
           top: `${cursorPos.y}px`,
@@ -455,7 +455,7 @@ export default function HomePage() {
         <div className="text-center space-y-2">
           <h2 className="text-2xl sm:text-3xl font-black text-white">Customer Reviews & Testimonials</h2>
           <p className="text-xs sm:text-sm text-slate-400">
-            Dynamic feedback from print shop operators utilizing zero-touch printing.
+            Dynamic feedback from print shop operators utilizing automated cloud printing.
           </p>
         </div>
 
