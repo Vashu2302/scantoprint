@@ -28,6 +28,15 @@ export default function VashuExactMerchantDashboard() {
   const [savingRates, setSavingRates] = useState(false);
   const [ratesSaved, setRatesSaved] = useState(false);
 
+  // Renewal / Upgrade Modal State
+  const [isRenewModalOpen, setIsRenewModalOpen] = useState(false);
+  const [selectedRenewPlan, setSelectedRenewPlan] = useState<'standard' | 'premium'>('standard');
+  const [adminUpi, setAdminUpi] = useState('9826000000@ybl');
+  const [renewUtr, setRenewUtr] = useState('');
+  const [submittingRenew, setSubmittingRenew] = useState(false);
+  const [renewSuccessMsg, setRenewSuccessMsg] = useState('');
+  const [renewErrorMsg, setRenewErrorMsg] = useState('');
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       setBaseUrl(window.location.origin);
@@ -40,6 +49,26 @@ export default function VashuExactMerchantDashboard() {
       document.title = `${name} • Counter Dashboard | ScanToPrint`;
     }
   }, [shop]);
+
+  // Load Admin Receiver UPI
+  useEffect(() => {
+    async function loadAdminUpi() {
+      try {
+        const { data } = await supabase
+          .from('app_config')
+          .select('value')
+          .eq('key', 'admin_upi_id')
+          .single();
+
+        if (data?.value) {
+          setAdminUpi(data.value);
+        }
+      } catch (e) {
+        // Fallback default
+      }
+    }
+    loadAdminUpi();
+  }, []);
 
   useEffect(() => {
     async function fetchShopData(isSilent = false) {
@@ -60,6 +89,12 @@ export default function VashuExactMerchantDashboard() {
           colorSingle: Number(shopData.color_single ?? 10),
           colorDouble: Number(shopData.color_double ?? 18),
         });
+
+        if (shopData.plan_type === 'premium') {
+          setSelectedRenewPlan('premium');
+        } else {
+          setSelectedRenewPlan('standard');
+        }
 
         const { data: orderData } = await supabase
           .from('orders')
@@ -167,6 +202,62 @@ export default function VashuExactMerchantDashboard() {
     }
   };
 
+  // Submit Renewal UTR
+  const handleSubmitRenewal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!shop) return;
+
+    const cleanUtr = renewUtr.trim();
+    if (cleanUtr.length < 4) {
+      setRenewErrorMsg('Please enter a valid 12-digit UPI Transaction / UTR number.');
+      return;
+    }
+
+    setSubmittingRenew(true);
+    setRenewErrorMsg('');
+    setRenewSuccessMsg('');
+
+    try {
+      const res = await fetch('/api/shops/submit-utr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shopId: shop.id,
+          utrNumber: cleanUtr,
+        }),
+      });
+
+      if (!res.ok) {
+        await supabase
+          .from('shops')
+          .update({
+            payment_utr: cleanUtr,
+            payment_verified: false,
+            plan_type: selectedRenewPlan,
+          })
+          .eq('id', shop.id);
+      } else {
+        await supabase
+          .from('shops')
+          .update({
+            plan_type: selectedRenewPlan,
+          })
+          .eq('id', shop.id);
+      }
+
+      setRenewSuccessMsg('✓ UTR submitted successfully! Admin will verify and extend your validity shortly.');
+      setTimeout(() => {
+        setIsRenewModalOpen(false);
+        setRenewSuccessMsg('');
+        setRenewUtr('');
+      }, 2500);
+    } catch (err: any) {
+      setRenewErrorMsg(err.message || 'Failed to submit UTR. Try again.');
+    } finally {
+      setSubmittingRenew(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#070b14] text-slate-100 flex items-center justify-center font-sans">
@@ -204,6 +295,28 @@ export default function VashuExactMerchantDashboard() {
     : Math.ceil((subEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
   const planType = (shop?.plan_type || 'trial').toUpperCase();
 
+  // Traffic-Light Expiry Color Scheme
+  const expiryColorClass = isExpired
+    ? 'text-rose-400 bg-rose-500/15 border-rose-500/30 animate-pulse'
+    : daysRemaining <= 3
+    ? 'text-rose-400 bg-rose-500/10 border-rose-500/30'
+    : daysRemaining <= 7
+    ? 'text-amber-400 bg-amber-500/10 border-amber-500/30'
+    : 'text-emerald-400 bg-emerald-500/10 border-emerald-500/25';
+
+  const expiryDotClass = isExpired || daysRemaining <= 3
+    ? 'bg-rose-500'
+    : daysRemaining <= 7
+    ? 'bg-amber-400'
+    : 'bg-emerald-400';
+
+  // Dynamic Button Title based on Plan Type
+  const renewBtnLabel = planType === 'TRIAL'
+    ? 'Upgrade to Pro Tier 🚀'
+    : planType === 'STANDARD'
+    ? 'Top-Up Quota / Renew ⚡'
+    : 'Renew Subscription 🔄';
+
   const totalPageLimit = Number(shop?.page_limit || 500);
   const printedPagesCount = Number(shop?.monthly_pages_printed || 0);
   const pagesRemaining = Math.max(0, totalPageLimit - printedPagesCount);
@@ -222,6 +335,11 @@ export default function VashuExactMerchantDashboard() {
   const waitingInQueue = orders.filter(
     (o) => o.print_status !== 'completed' && o.print_status !== 'printed'
   ).length;
+
+  // Renew Modal Amount Calculation
+  const renewAmount = selectedRenewPlan === 'premium' ? 249 : 149;
+  const renewDeepLink = `upi://pay?pa=${adminUpi}&pn=ScanToPrint%20Platform&am=${renewAmount}&cu=INR&tn=STP%20${selectedRenewPlan.toUpperCase()}%20Renew`;
+  const renewQrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(renewDeepLink)}`;
 
   return (
     <div className="min-h-screen bg-[#060813] text-slate-200 font-sans selection:bg-indigo-600 selection:text-white pb-12">
@@ -266,7 +384,7 @@ export default function VashuExactMerchantDashboard() {
       `}</style>
 
       {/* Top Navbar */}
-      <header className="border-b border-slate-800/80 bg-[#090d1c]/90 px-6 py-3.5 flex flex-wrap items-center justify-between gap-4 no-print">
+      <header className="border-b border-slate-800/80 bg-[#090d1c]/90 px-6 py-3.5 flex flex-wrap items-center justify-between gap-4 no-print sticky top-0 z-40 backdrop-blur-xl">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-sm shadow-md shadow-indigo-600/30">
             {shopInitial}
@@ -291,17 +409,20 @@ export default function VashuExactMerchantDashboard() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {isExpired ? (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30 shadow-sm animate-pulse">
-              <span className="w-2 h-2 rounded-full bg-rose-500"></span>
-              PLAN EXPIRED
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-500/10 text-indigo-300 border border-indigo-500/25 shadow-sm font-mono">
-              <span className="w-2 h-2 rounded-full bg-indigo-400"></span>
-              {daysRemaining} DAYS LEFT
-            </span>
-          )}
+          {/* Traffic Light Day Counter Badge */}
+          <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border shadow-sm font-mono ${expiryColorClass}`}>
+            <span className={`w-2 h-2 rounded-full ${expiryDotClass}`}></span>
+            {isExpired ? 'EXPIRED' : `${daysRemaining} DAYS LEFT`}
+          </span>
+
+          {/* Direct Renewal / Top-Up Action Button in Navbar */}
+          <button
+            onClick={() => setIsRenewModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
+          >
+            <span>⚡</span>
+            <span>{renewBtnLabel}</span>
+          </button>
 
           <button
             onClick={handleDownloadSoftware}
@@ -368,11 +489,17 @@ export default function VashuExactMerchantDashboard() {
       </header>
 
       {isExpired && (
-        <div className="bg-rose-950/60 border-b border-rose-500/30 px-6 py-2.5 text-center text-xs text-rose-300 flex items-center justify-center gap-2 no-print">
+        <div className="bg-rose-950/80 border-b border-rose-500/40 px-6 py-3 text-center text-xs text-rose-200 flex flex-wrap items-center justify-center gap-3 no-print">
           <span>⚠️</span>
           <span>
-            <strong>Your counter subscription has expired.</strong> Please contact platform support or admin to renew and keep automated printing active.
+            <strong>Your counter subscription has expired.</strong> Renew now to resume instant customer printing.
           </span>
+          <button
+            onClick={() => setIsRenewModalOpen(true)}
+            className="px-3 py-1 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg transition-all cursor-pointer"
+          >
+            Renew Now ➔
+          </button>
         </div>
       )}
 
@@ -401,8 +528,8 @@ export default function VashuExactMerchantDashboard() {
           </div>
         </div>
 
-        {/* Subscription Banner */}
-        <div className="bg-gradient-to-r from-[#0b1021] to-[#0e1626] border border-indigo-500/30 rounded-2xl p-5 shadow-xl flex flex-wrap items-center justify-between gap-4 no-print">
+        {/* Subscription Banner with Inline Renewal Controls */}
+        <div className="bg-gradient-to-r from-[#0b1021] via-[#0e1628] to-[#070b18] border border-indigo-500/30 rounded-2xl p-5 shadow-xl flex flex-wrap items-center justify-between gap-4 no-print">
           <div className="flex items-center gap-3.5">
             <div className="w-11 h-11 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-xl text-indigo-400">
               💳
@@ -441,18 +568,21 @@ export default function VashuExactMerchantDashboard() {
           </div>
 
           <div className="flex items-center gap-3">
-            {isExpired ? (
-              <span className="px-4 py-2 bg-rose-500/15 border border-rose-500/30 text-rose-400 font-mono font-bold text-xs rounded-xl animate-pulse">
-                Expired (0 Days Left)
+            <div className="text-right">
+              <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-medium">Time Left</span>
+              <span className={`text-base font-black font-mono block ${
+                isExpired || daysRemaining <= 3 ? 'text-rose-400' : daysRemaining <= 7 ? 'text-amber-400' : 'text-emerald-400'
+              }`}>
+                {isExpired ? '0 Days (Expired)' : `${daysRemaining} Days Remaining`}
               </span>
-            ) : (
-              <div className="text-right">
-                <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-medium">Time Left</span>
-                <span className="text-base font-black font-mono text-emerald-400">
-                  {daysRemaining} Days Remaining
-                </span>
-              </div>
-            )}
+            </div>
+
+            <button
+              onClick={() => setIsRenewModalOpen(true)}
+              className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md shadow-emerald-600/30 cursor-pointer"
+            >
+              {renewBtnLabel}
+            </button>
           </div>
         </div>
 
@@ -600,7 +730,7 @@ export default function VashuExactMerchantDashboard() {
           </div>
         )}
 
-        {/* TAB 3: STORE STANDEE WITH STP BRAND BADGE */}
+        {/* TAB 3: STORE STANDEE */}
         {activeTab === 'standee' && (
           <div className="flex flex-col items-center justify-center pt-2 space-y-4">
             <div id="printable-standee-container" className="w-full flex justify-center">
@@ -641,7 +771,6 @@ export default function VashuExactMerchantDashboard() {
                   </p>
                 </div>
 
-                {/* Footer with Brand SVG Logo Badge */}
                 <div className="py-4 px-3 space-y-1">
                   <div className="text-[9px] uppercase tracking-wider text-slate-400 font-semibold">
                     POWERED & SECURED BY
@@ -669,6 +798,142 @@ export default function VashuExactMerchantDashboard() {
           </div>
         )}
       </main>
+
+      {/* ========================================================================= */}
+      {/* RENEWAL / TOP-UP / UPGRADE IN-PAGE CHECKOUT MODAL                          */}
+      {/* ========================================================================= */}
+      {isRenewModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto no-print">
+          <div className="bg-[#0b1021] border border-indigo-500/40 rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl space-y-5 relative animate-in fade-in zoom-in-95 duration-150">
+            
+            <button
+              onClick={() => {
+                setIsRenewModalOpen(false);
+                setRenewErrorMsg('');
+                setRenewSuccessMsg('');
+              }}
+              className="absolute top-5 right-5 text-slate-400 hover:text-white text-lg font-bold cursor-pointer"
+            >
+              ✕
+            </button>
+
+            <div className="text-center space-y-1">
+              <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
+                Subscription & Quota Manager
+              </span>
+              <h2 className="text-xl font-black text-white pt-1">
+                Renew or Upgrade Counter Tier
+              </h2>
+              <p className="text-xs text-slate-400">
+                Select your preferred tier, scan and pay via UPI, and submit the UTR.
+              </p>
+            </div>
+
+            {/* Plan Switcher Pills */}
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <div
+                onClick={() => setSelectedRenewPlan('standard')}
+                className={`p-3.5 rounded-2xl border transition-all cursor-pointer text-center space-y-1 ${
+                  selectedRenewPlan === 'standard'
+                    ? 'bg-indigo-950/60 border-indigo-500 shadow-md shadow-indigo-600/20'
+                    : 'bg-[#070b18] border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider block">
+                  Standard Plan
+                </span>
+                <div className="text-lg font-black font-mono text-white">₹149 <span className="text-xs text-slate-400 font-normal">/ 28d</span></div>
+                <p className="text-[10px] text-slate-400">500 Pages Quota</p>
+              </div>
+
+              <div
+                onClick={() => setSelectedRenewPlan('premium')}
+                className={`p-3.5 rounded-2xl border transition-all cursor-pointer text-center space-y-1 ${
+                  selectedRenewPlan === 'premium'
+                    ? 'bg-amber-950/60 border-amber-500 shadow-md shadow-amber-500/20'
+                    : 'bg-[#070b18] border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">
+                  Premium Plan
+                </span>
+                <div className="text-lg font-black font-mono text-white">₹249 <span className="text-xs text-slate-400 font-normal">/ 28d</span></div>
+                <p className="text-[10px] text-amber-300 font-bold">Unlimited Pages</p>
+              </div>
+            </div>
+
+            {/* UPI QR & Intent Payment Card */}
+            <div className="bg-[#070b18] border border-slate-800 rounded-2xl p-4 text-center space-y-3">
+              <div className="bg-white p-2 rounded-2xl inline-block mx-auto shadow-md">
+                <img
+                  src={renewQrSrc}
+                  alt="Admin Renewal QR"
+                  className="w-36 h-36 mx-auto object-contain"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-xs font-mono text-slate-300 block">
+                  Pay to Admin UPI: <b className="text-emerald-400">{adminUpi}</b>
+                </span>
+                <span className="text-base font-black font-mono text-white block">
+                  Amount: ₹{renewAmount}
+                </span>
+              </div>
+
+              <div>
+                <a
+                  href={renewDeepLink}
+                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md shadow-indigo-600/30 flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span>🚀</span>
+                  <span>Pay ₹{renewAmount} via PhonePe / GPay / Paytm</span>
+                </a>
+              </div>
+            </div>
+
+            {renewErrorMsg && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs">
+                {renewErrorMsg}
+              </div>
+            )}
+
+            {renewSuccessMsg && (
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs">
+                {renewSuccessMsg}
+              </div>
+            )}
+
+            {/* UTR Form */}
+            <form onSubmit={handleSubmitRenewal} className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-300 mb-1">
+                  12-Digit UPI Transaction / UTR Number
+                </label>
+                <input
+                  required
+                  type="text"
+                  maxLength={16}
+                  placeholder="Enter 12-digit UPI Ref No."
+                  value={renewUtr}
+                  onChange={(e) => setRenewUtr(e.target.value)}
+                  className="w-full bg-[#070b18] border border-slate-800 focus:border-emerald-500 rounded-xl px-3.5 py-2.5 text-xs text-emerald-400 font-mono focus:outline-none transition-all"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={submittingRenew || renewUtr.trim().length < 4}
+                className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-emerald-600/30 cursor-pointer flex items-center justify-center gap-2"
+              >
+                {submittingRenew ? 'Submitting & Verifying...' : 'Confirm & I Have Paid ➔'}
+              </button>
+            </form>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
