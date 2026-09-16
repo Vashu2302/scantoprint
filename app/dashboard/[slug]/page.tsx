@@ -28,9 +28,18 @@ export default function VashuExactMerchantDashboard() {
   const [savingRates, setSavingRates] = useState(false);
   const [ratesSaved, setRatesSaved] = useState(false);
 
-  // Renewal / Upgrade Modal State
+  // Renewal / Top-Up Modal State
   const [isRenewModalOpen, setIsRenewModalOpen] = useState(false);
-  const [selectedRenewPlan, setSelectedRenewPlan] = useState<'standard' | 'premium'>('standard');
+  
+  // Tab 1: 'topup' (Only Pages) vs Tab 2: 'plan' (Full Plan + Days)
+  const [modalMode, setModalMode] = useState<'topup' | 'plan'>('topup');
+  
+  // Top-Up Options: 100 pgs (₹50) | 250 pgs (₹80) | 500 pgs (₹100)
+  const [selectedTopup, setSelectedTopup] = useState<{ pages: number; price: number }>({ pages: 100, price: 50 });
+  
+  // Full Plan Options: Standard (₹149) | Premium (₹249)
+  const [selectedPlanTier, setSelectedPlanTier] = useState<'standard' | 'premium'>('standard');
+
   const [adminUpi, setAdminUpi] = useState('9826000000@ybl');
   const [renewUtr, setRenewUtr] = useState('');
   const [submittingRenew, setSubmittingRenew] = useState(false);
@@ -50,7 +59,6 @@ export default function VashuExactMerchantDashboard() {
     }
   }, [shop]);
 
-  // Load Admin Receiver UPI
   useEffect(() => {
     async function loadAdminUpi() {
       try {
@@ -63,9 +71,7 @@ export default function VashuExactMerchantDashboard() {
         if (data?.value) {
           setAdminUpi(data.value);
         }
-      } catch (e) {
-        // Fallback default
-      }
+      } catch (e) {}
     }
     loadAdminUpi();
   }, []);
@@ -91,9 +97,9 @@ export default function VashuExactMerchantDashboard() {
         });
 
         if (shopData.plan_type === 'premium') {
-          setSelectedRenewPlan('premium');
+          setSelectedPlanTier('premium');
         } else {
-          setSelectedRenewPlan('standard');
+          setSelectedPlanTier('standard');
         }
 
         const { data: orderData } = await supabase
@@ -202,8 +208,8 @@ export default function VashuExactMerchantDashboard() {
     }
   };
 
-  // Submit Renewal UTR
-  const handleSubmitRenewal = async (e: React.FormEvent) => {
+  // Submit UTR for either Quota Top-Up or Plan Renewal
+  const handleSubmitPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!shop) return;
 
@@ -218,34 +224,32 @@ export default function VashuExactMerchantDashboard() {
     setRenewSuccessMsg('');
 
     try {
-      const res = await fetch('/api/shops/submit-utr', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          shopId: shop.id,
-          utrNumber: cleanUtr,
-        }),
-      });
+      // Encode action metadata into request
+      const actionType = modalMode === 'topup' ? 'quota_topup' : 'plan_renew';
+      const metaPages = modalMode === 'topup' ? selectedTopup.pages : (selectedPlanTier === 'premium' ? 999999 : 500);
+      const metaPlan = modalMode === 'plan' ? selectedPlanTier : (shop.plan_type || 'standard');
 
-      if (!res.ok) {
-        await supabase
-          .from('shops')
-          .update({
-            payment_utr: cleanUtr,
-            payment_verified: false,
-            plan_type: selectedRenewPlan,
-          })
-          .eq('id', shop.id);
-      } else {
-        await supabase
-          .from('shops')
-          .update({
-            plan_type: selectedRenewPlan,
-          })
-          .eq('id', shop.id);
-      }
+      // Update shop with pending UTR and metadata
+      const { error } = await supabase
+        .from('shops')
+        .update({
+          payment_utr: cleanUtr,
+          payment_verified: false,
+          pending_action_type: actionType,
+          pending_action_pages: metaPages,
+          pending_action_plan: metaPlan,
+          pending_action_amount: payableAmount,
+        })
+        .eq('id', shop.id);
 
-      setRenewSuccessMsg('✓ UTR submitted successfully! Admin will verify and extend your validity shortly.');
+      if (error) throw error;
+
+      setRenewSuccessMsg(
+        modalMode === 'topup'
+          ? `✓ UTR submitted for +${selectedTopup.pages} Pages Top-Up! Admin approval will add pages without altering days.`
+          : `✓ UTR submitted for Plan Renewal! Admin approval will add +28 days to your remaining validity.`
+      );
+
       setTimeout(() => {
         setIsRenewModalOpen(false);
         setRenewSuccessMsg('');
@@ -310,13 +314,6 @@ export default function VashuExactMerchantDashboard() {
     ? 'bg-amber-400'
     : 'bg-emerald-400';
 
-  // Dynamic Button Title based on Plan Type
-  const renewBtnLabel = planType === 'TRIAL'
-    ? 'Upgrade to Pro Tier 🚀'
-    : planType === 'STANDARD'
-    ? 'Top-Up Quota / Renew ⚡'
-    : 'Renew Subscription 🔄';
-
   const totalPageLimit = Number(shop?.page_limit || 500);
   const printedPagesCount = Number(shop?.monthly_pages_printed || 0);
   const pagesRemaining = Math.max(0, totalPageLimit - printedPagesCount);
@@ -336,50 +333,27 @@ export default function VashuExactMerchantDashboard() {
     (o) => o.print_status !== 'completed' && o.print_status !== 'printed'
   ).length;
 
-  // Renew Modal Amount Calculation
-  const renewAmount = selectedRenewPlan === 'premium' ? 249 : 149;
-  const renewDeepLink = `upi://pay?pa=${adminUpi}&pn=ScanToPrint%20Platform&am=${renewAmount}&cu=INR&tn=STP%20${selectedRenewPlan.toUpperCase()}%20Renew`;
+  // Payable Amount based on Active Modal Mode
+  const payableAmount = modalMode === 'topup'
+    ? selectedTopup.price
+    : selectedPlanTier === 'premium' ? 249 : 149;
+
+  const paymentNote = modalMode === 'topup'
+    ? `STP TopUp ${selectedTopup.pages} Pages`
+    : `STP ${selectedPlanTier.toUpperCase()} Plan`;
+
+  const renewDeepLink = `upi://pay?pa=${adminUpi}&pn=ScanToPrint%20Platform&am=${payableAmount}&cu=INR&tn=${encodeURIComponent(paymentNote)}`;
   const renewQrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(renewDeepLink)}`;
 
   return (
     <div className="min-h-screen bg-[#060813] text-slate-200 font-sans selection:bg-indigo-600 selection:text-white pb-12">
       <style jsx global>{`
         @media print {
-          @page {
-            size: A4 portrait;
-            margin: 10mm;
-          }
-          body {
-            background-color: #ffffff !important;
-            color: #000000 !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-          header,
-          nav,
-          .no-print,
-          button {
-            display: none !important;
-          }
-          #printable-standee-container {
-            display: flex !important;
-            justify-content: center !important;
-            align-items: center !important;
-            width: 100% !important;
-            min-height: 90vh !important;
-            margin: 0 auto !important;
-            padding: 0 !important;
-          }
-          #printable-standee {
-            box-shadow: none !important;
-            break-inside: avoid !important;
-            page-break-inside: avoid !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-            transform: scale(1.05);
-          }
+          @page { size: A4 portrait; margin: 10mm; }
+          body { background-color: #ffffff !important; color: #000000 !important; margin: 0 !important; padding: 0 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          header, nav, .no-print, button { display: none !important; }
+          #printable-standee-container { display: flex !important; justify-content: center !important; align-items: center !important; width: 100% !important; min-height: 90vh !important; margin: 0 auto !important; padding: 0 !important; }
+          #printable-standee { box-shadow: none !important; break-inside: avoid !important; page-break-inside: avoid !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; transform: scale(1.05); }
         }
       `}</style>
 
@@ -409,27 +383,41 @@ export default function VashuExactMerchantDashboard() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Traffic Light Day Counter Badge */}
+          {/* Days Left Traffic Light */}
           <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border shadow-sm font-mono ${expiryColorClass}`}>
             <span className={`w-2 h-2 rounded-full ${expiryDotClass}`}></span>
             {isExpired ? 'EXPIRED' : `${daysRemaining} DAYS LEFT`}
           </span>
 
-          {/* Direct Renewal / Top-Up Action Button in Navbar */}
+          {/* Quick Action Buttons */}
           <button
-            onClick={() => setIsRenewModalOpen(true)}
+            onClick={() => {
+              setModalMode('topup');
+              setIsRenewModalOpen(true);
+            }}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
           >
             <span>⚡</span>
-            <span>{renewBtnLabel}</span>
+            <span>Top-Up Quota</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setModalMode('plan');
+              setIsRenewModalOpen(true);
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/25 transition-all cursor-pointer"
+          >
+            <span>🔄</span>
+            <span>Renew Plan</span>
           </button>
 
           <button
             onClick={handleDownloadSoftware}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-500/40 shadow-sm transition-all cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 shadow-sm transition-all cursor-pointer"
           >
             <span>⬇</span>
-            <span>Download PC Package (.zip)</span>
+            <span>PC Spooler (.zip)</span>
           </button>
 
           {!isConnected ? (
@@ -452,9 +440,7 @@ export default function VashuExactMerchantDashboard() {
           <button
             onClick={() => setActiveTab('queue')}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-              activeTab === 'queue'
-                ? 'bg-indigo-600 text-white shadow'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+              activeTab === 'queue' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
             }`}
           >
             Live Queue
@@ -462,9 +448,7 @@ export default function VashuExactMerchantDashboard() {
           <button
             onClick={() => setActiveTab('pricing')}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-              activeTab === 'pricing'
-                ? 'bg-indigo-600 text-white shadow'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+              activeTab === 'pricing' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
             }`}
           >
             Pricing Rates
@@ -472,9 +456,7 @@ export default function VashuExactMerchantDashboard() {
           <button
             onClick={() => setActiveTab('standee')}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-              activeTab === 'standee'
-                ? 'bg-indigo-600 text-white shadow'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+              activeTab === 'standee' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
             }`}
           >
             Store Standee
@@ -492,10 +474,13 @@ export default function VashuExactMerchantDashboard() {
         <div className="bg-rose-950/80 border-b border-rose-500/40 px-6 py-3 text-center text-xs text-rose-200 flex flex-wrap items-center justify-center gap-3 no-print">
           <span>⚠️</span>
           <span>
-            <strong>Your counter subscription has expired.</strong> Renew now to resume instant customer printing.
+            <strong>Your counter subscription has expired.</strong> Renew now to resume customer printing.
           </span>
           <button
-            onClick={() => setIsRenewModalOpen(true)}
+            onClick={() => {
+              setModalMode('plan');
+              setIsRenewModalOpen(true);
+            }}
             className="px-3 py-1 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg transition-all cursor-pointer"
           >
             Renew Now ➔
@@ -504,22 +489,21 @@ export default function VashuExactMerchantDashboard() {
       )}
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 space-y-5">
+        
+        {/* Metric Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 no-print">
           <div className="bg-[#0b1021] border border-slate-800/90 rounded-xl p-4">
             <span className="text-[11px] text-slate-400 uppercase tracking-wider block font-medium">Today&apos;s Revenue</span>
             <div className="text-xl font-bold font-mono text-emerald-400 mt-1">₹{todayRevenue.toFixed(2)}</div>
           </div>
-
           <div className="bg-[#0b1021] border border-slate-800/90 rounded-xl p-4">
             <span className="text-[11px] text-slate-400 uppercase tracking-wider block font-medium">Total Jobs</span>
             <div className="text-xl font-bold font-mono text-white mt-1">{orders.length}</div>
           </div>
-
           <div className="bg-[#0b1021] border border-slate-800/90 rounded-xl p-4">
             <span className="text-[11px] text-slate-400 uppercase tracking-wider block font-medium">Waiting in Queue</span>
             <div className="text-xl font-bold font-mono text-amber-400 mt-1">{waitingInQueue}</div>
           </div>
-
           <div className="bg-[#0b1021] border border-slate-800/90 rounded-xl p-4">
             <span className="text-[11px] text-slate-400 uppercase tracking-wider block font-medium">UPI Receiver</span>
             <div className="text-xs font-mono text-indigo-300 truncate mt-2 font-medium" title={shop.upi_id}>
@@ -528,7 +512,7 @@ export default function VashuExactMerchantDashboard() {
           </div>
         </div>
 
-        {/* Subscription Banner with Inline Renewal Controls */}
+        {/* Subscription Banner with Dual Direct Actions */}
         <div className="bg-gradient-to-r from-[#0b1021] via-[#0e1628] to-[#070b18] border border-indigo-500/30 rounded-2xl p-5 shadow-xl flex flex-wrap items-center justify-between gap-4 no-print">
           <div className="flex items-center gap-3.5">
             <div className="w-11 h-11 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-xl text-indigo-400">
@@ -536,12 +520,8 @@ export default function VashuExactMerchantDashboard() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-white uppercase tracking-wider">
-                  Active Subscription:
-                </span>
-                <span className={`text-xs font-mono font-black uppercase ${
-                  planType === 'PREMIUM' ? 'text-amber-400' : 'text-indigo-400'
-                }`}>
+                <span className="text-xs font-bold text-white uppercase tracking-wider">Active Subscription:</span>
+                <span className={`text-xs font-mono font-black uppercase ${planType === 'PREMIUM' ? 'text-amber-400' : 'text-indigo-400'}`}>
                   {planType} TIER
                 </span>
               </div>
@@ -556,10 +536,10 @@ export default function VashuExactMerchantDashboard() {
                   </span>
                 ) : (
                   <span className="flex items-center gap-1.5">
-                    <span>{totalPageLimit} Pages per Month</span>
+                    <span>{totalPageLimit} Pages Quota</span>
                     <span className="text-slate-600 font-mono">—</span>
                     <span className="font-bold font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                      {pagesRemaining} Pages Left This Month
+                      {pagesRemaining} Pages Left
                     </span>
                   </span>
                 )}
@@ -577,16 +557,31 @@ export default function VashuExactMerchantDashboard() {
               </span>
             </div>
 
-            <button
-              onClick={() => setIsRenewModalOpen(true)}
-              className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md shadow-emerald-600/30 cursor-pointer"
-            >
-              {renewBtnLabel}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setModalMode('topup');
+                  setIsRenewModalOpen(true);
+                }}
+                className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md shadow-emerald-600/30 cursor-pointer"
+              >
+                ⚡ Top-Up Pages
+              </button>
+
+              <button
+                onClick={() => {
+                  setModalMode('plan');
+                  setIsRenewModalOpen(true);
+                }}
+                className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md shadow-indigo-600/30 cursor-pointer"
+              >
+                🔄 Buy / Renew Plan
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Spooler Agent Key Box */}
+        {/* Agent Key */}
         <div className="bg-[#0b1021] border border-slate-800/90 rounded-xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs no-print">
           <div className="flex items-center gap-2">
             <span className="text-amber-400 font-bold">⚡ Desktop Spooler Agent Key:</span>
@@ -603,7 +598,6 @@ export default function VashuExactMerchantDashboard() {
             <div className="px-5 py-3.5 border-b border-slate-800/80">
               <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Incoming Spooler Stream</span>
             </div>
-
             {orders.length === 0 ? (
               <div className="p-12 text-center text-slate-500 text-sm">
                 No orders in queue yet. New prints will automatically appear here.
@@ -633,13 +627,9 @@ export default function VashuExactMerchantDashboard() {
                         <td className="p-3.5 font-mono text-slate-300">{o.copies || 1}</td>
                         <td className="p-3.5 font-mono text-emerald-400 font-bold">₹{o.amount}</td>
                         <td className="p-3.5">
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
-                              o.print_status === 'completed'
-                                ? 'bg-emerald-500/10 text-emerald-400'
-                                : 'bg-amber-500/10 text-amber-400'
-                            }`}
-                          >
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
+                            o.print_status === 'completed' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'
+                          }`}>
                             {o.print_status || 'in_queue'}
                           </span>
                         </td>
@@ -736,10 +726,7 @@ export default function VashuExactMerchantDashboard() {
             <div id="printable-standee-container" className="w-full flex justify-center">
               <div
                 id="printable-standee"
-                style={{
-                  WebkitPrintColorAdjust: 'exact',
-                  printColorAdjust: 'exact',
-                }}
+                style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
                 className="w-full max-w-[340px] rounded-[32px] overflow-hidden bg-gradient-to-b from-[#5c4efc] via-[#473beb] to-[#070b18] border border-indigo-500/30 p-1 shadow-2xl shadow-indigo-950/70 text-center"
               >
                 <div className="pt-6 pb-4 px-4 space-y-2">
@@ -800,7 +787,7 @@ export default function VashuExactMerchantDashboard() {
       </main>
 
       {/* ========================================================================= */}
-      {/* RENEWAL / TOP-UP / UPGRADE IN-PAGE CHECKOUT MODAL                          */}
+      {/* TWO-MODE MODAL: 1. QUOTA TOP-UP (PAGES ONLY) VS 2. BUY/RENEW PLAN (+28D)   */}
       {/* ========================================================================= */}
       {isRenewModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto no-print">
@@ -817,67 +804,144 @@ export default function VashuExactMerchantDashboard() {
               ✕
             </button>
 
-            <div className="text-center space-y-1">
-              <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
-                Subscription & Quota Manager
-              </span>
-              <h2 className="text-xl font-black text-white pt-1">
-                Renew or Upgrade Counter Tier
-              </h2>
-              <p className="text-xs text-slate-400">
-                Select your preferred tier, scan and pay via UPI, and submit the UTR.
-              </p>
-            </div>
-
-            {/* Plan Switcher Pills */}
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <div
-                onClick={() => setSelectedRenewPlan('standard')}
-                className={`p-3.5 rounded-2xl border transition-all cursor-pointer text-center space-y-1 ${
-                  selectedRenewPlan === 'standard'
-                    ? 'bg-indigo-950/60 border-indigo-500 shadow-md shadow-indigo-600/20'
-                    : 'bg-[#070b18] border-slate-800 hover:border-slate-700'
-                }`}
-              >
-                <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider block">
-                  Standard Plan
-                </span>
-                <div className="text-lg font-black font-mono text-white">₹149 <span className="text-xs text-slate-400 font-normal">/ 28d</span></div>
-                <p className="text-[10px] text-slate-400">500 Pages Quota</p>
+            {/* Header with Dual Switcher Tabs */}
+            <div className="text-center space-y-3">
+              <div className="inline-flex items-center p-1 rounded-2xl bg-[#070b18] border border-slate-800 shadow-inner">
+                <button
+                  type="button"
+                  onClick={() => setModalMode('topup')}
+                  className={`py-2 px-5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    modalMode === 'topup'
+                      ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 scale-[1.02]'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <span>⚡</span>
+                  <span>Top-Up Pages Only</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModalMode('plan')}
+                  className={`py-2 px-5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    modalMode === 'plan'
+                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 scale-[1.02]'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <span>📦</span>
+                  <span>Buy / Renew Plan</span>
+                </button>
               </div>
 
-              <div
-                onClick={() => setSelectedRenewPlan('premium')}
-                className={`p-3.5 rounded-2xl border transition-all cursor-pointer text-center space-y-1 ${
-                  selectedRenewPlan === 'premium'
-                    ? 'bg-amber-950/60 border-amber-500 shadow-md shadow-amber-500/20'
-                    : 'bg-[#070b18] border-slate-800 hover:border-slate-700'
-                }`}
-              >
-                <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">
-                  Premium Plan
-                </span>
-                <div className="text-lg font-black font-mono text-white">₹249 <span className="text-xs text-slate-400 font-normal">/ 28d</span></div>
-                <p className="text-[10px] text-amber-300 font-bold">Unlimited Pages</p>
+              <div>
+                <h2 className="text-lg font-black text-white">
+                  {modalMode === 'topup' ? 'Add Extra Pages Quota' : 'Renew Subscription Plan (+28 Days)'}
+                </h2>
+                <p className="text-[11px] text-slate-400">
+                  {modalMode === 'topup'
+                    ? 'Top-up only adds pages. Your active validity days will NOT change.'
+                    : 'Plan renewal adds +28 Days to your remaining validity (no days are wasted).'}
+                </p>
               </div>
             </div>
 
-            {/* UPI QR & Intent Payment Card (CLEANED - NO RAW UPI ID DISPLAYED) */}
-            <div className="bg-[#070b18] border border-slate-800 rounded-2xl p-5 text-center space-y-3">
-              <div className="bg-white p-2.5 rounded-2xl inline-block mx-auto shadow-md">
+            {/* MODE 1: QUOTA TOP-UP (100 pgs ₹50 | 250 pgs ₹80 | 500 pgs ₹100) */}
+            {modalMode === 'topup' && (
+              <div className="grid grid-cols-3 gap-2.5 pt-1">
+                <div
+                  onClick={() => setSelectedTopup({ pages: 100, price: 50 })}
+                  className={`p-3 rounded-2xl border transition-all cursor-pointer text-center space-y-1 ${
+                    selectedTopup.pages === 100
+                      ? 'bg-emerald-950/60 border-emerald-500 shadow-md shadow-emerald-600/20'
+                      : 'bg-[#070b18] border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Starter</span>
+                  <div className="text-base font-black font-mono text-emerald-400">+100 Pgs</div>
+                  <div className="text-xs font-bold text-white font-mono">₹50</div>
+                </div>
+
+                <div
+                  onClick={() => setSelectedTopup({ pages: 250, price: 80 })}
+                  className={`p-3 rounded-2xl border transition-all cursor-pointer text-center space-y-1 relative ${
+                    selectedTopup.pages === 250
+                      ? 'bg-emerald-950/60 border-emerald-500 shadow-md shadow-emerald-600/20'
+                      : 'bg-[#070b18] border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider block">Popular</span>
+                  <div className="text-base font-black font-mono text-emerald-400">+250 Pgs</div>
+                  <div className="text-xs font-bold text-white font-mono">₹80</div>
+                </div>
+
+                <div
+                  onClick={() => setSelectedTopup({ pages: 500, price: 100 })}
+                  className={`p-3 rounded-2xl border transition-all cursor-pointer text-center space-y-1 ${
+                    selectedTopup.pages === 500
+                      ? 'bg-emerald-950/60 border-emerald-500 shadow-md shadow-emerald-600/20'
+                      : 'bg-[#070b18] border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Bulk Saver</span>
+                  <div className="text-base font-black font-mono text-emerald-400">+500 Pgs</div>
+                  <div className="text-xs font-bold text-white font-mono">₹100</div>
+                </div>
+              </div>
+            )}
+
+            {/* MODE 2: BUY / RENEW PLAN (Standard ₹149 | Premium ₹249) */}
+            {modalMode === 'plan' && (
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <div
+                  onClick={() => setSelectedPlanTier('standard')}
+                  className={`p-3.5 rounded-2xl border transition-all cursor-pointer text-center space-y-1 ${
+                    selectedPlanTier === 'standard'
+                      ? 'bg-indigo-950/60 border-indigo-500 shadow-md shadow-indigo-600/20'
+                      : 'bg-[#070b18] border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider block">
+                    Standard Plan
+                  </span>
+                  <div className="text-lg font-black font-mono text-white">₹149</div>
+                  <p className="text-[10px] text-slate-400">500 Pages + 28 Days Added</p>
+                </div>
+
+                <div
+                  onClick={() => setSelectedPlanTier('premium')}
+                  className={`p-3.5 rounded-2xl border transition-all cursor-pointer text-center space-y-1 ${
+                    selectedPlanTier === 'premium'
+                      ? 'bg-amber-950/60 border-amber-500 shadow-md shadow-amber-500/20'
+                      : 'bg-[#070b18] border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">
+                    Premium Plan
+                  </span>
+                  <div className="text-lg font-black font-mono text-white">₹249</div>
+                  <p className="text-[10px] text-amber-300 font-bold">Unlimited + 28 Days Added</p>
+                </div>
+              </div>
+            )}
+
+            {/* Clean QR & One-Click Payment Card */}
+            <div className="bg-[#070b18] border border-slate-800 rounded-2xl p-4 text-center space-y-3">
+              <div className="bg-white p-2 rounded-2xl inline-block mx-auto shadow-md">
                 <img
                   src={renewQrSrc}
                   alt="Scan to Pay Admin"
-                  className="w-44 h-44 mx-auto object-contain"
+                  className="w-40 h-40 mx-auto object-contain"
                 />
               </div>
 
               <div className="space-y-0.5">
                 <span className="text-base font-black font-mono text-emerald-400 block">
-                  Payable Amount: ₹{renewAmount}
+                  Payable Amount: ₹{payableAmount}
                 </span>
                 <span className="text-[10px] text-slate-400">
-                  Scan the QR directly or tap below to open PhonePe / GPay
+                  {modalMode === 'topup'
+                    ? `Adding +${selectedTopup.pages} Pages without altering validity`
+                    : `Extending validity: +28 Days added to existing`}
                 </span>
               </div>
 
@@ -887,7 +951,7 @@ export default function VashuExactMerchantDashboard() {
                   className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md shadow-indigo-600/30 flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <span>🚀</span>
-                  <span>Pay ₹{renewAmount} via PhonePe / GPay / Paytm</span>
+                  <span>Pay ₹{payableAmount} via PhonePe / GPay / Paytm</span>
                 </a>
               </div>
             </div>
@@ -905,7 +969,7 @@ export default function VashuExactMerchantDashboard() {
             )}
 
             {/* UTR Form */}
-            <form onSubmit={handleSubmitRenewal} className="space-y-3">
+            <form onSubmit={handleSubmitPayment} className="space-y-3">
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-300 mb-1">
                   12-Digit UPI Transaction / UTR Number

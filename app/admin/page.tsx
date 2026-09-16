@@ -16,27 +16,21 @@ export default function AdminSuperDashboard() {
     document.title = 'Central Admin Control • ScanToPrint';
   }, []);
 
-  // Authentication & Data State
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [inputPassword, setInputPassword] = useState('');
   const [authError, setAuthError] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Top Master Tab: 'shops' | 'agents'
   const [adminView, setAdminView] = useState<'shops' | 'agents'>('shops');
-
-  // Core Data
   const [shops, setShops] = useState<any[]>([]);
   const [partners, setPartners] = useState<any[]>([]);
   const [payoutsHistory, setPayoutsHistory] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Partner Payout Requests
   const [pendingPayouts, setPendingPayouts] = useState<any[]>([]);
   const [payoutUtrMap, setPayoutUtrMap] = useState<{ [id: string]: string }>({});
   const [settlingPayoutId, setSettlingPayoutId] = useState<string | null>(null);
 
-  // Dynamic Settings
   const [adminUpi, setAdminUpi] = useState('');
   const [isSavingUpi, setIsSavingUpi] = useState(false);
   const [upiStatusMsg, setUpiStatusMsg] = useState('');
@@ -215,26 +209,51 @@ export default function AdminSuperDashboard() {
     }
   };
 
-  // UTR Shop Approval & Partner Commission Auto-Credit + 28 Days Auto-Extension
+  // SMART APPROVAL: Handles Quota Top-Up (Pages Only) vs Plan Renewal (+28 Days)
   const handleApproveUtr = async (shop: any) => {
-    const planType = (shop.plan_type || 'standard').toUpperCase();
-    const expectedAmt = planType === 'PREMIUM' ? 249 : 149;
+    const actionType = shop.pending_action_type || 'plan_renew';
+    const isTopup = actionType === 'quota_topup';
+    const topupPages = Number(shop.pending_action_pages || 100);
+    const expectedAmount = Number(shop.pending_action_amount || (isTopup ? 50 : 149));
 
-    if (!confirm(`Confirm payment of ₹${expectedAmt} received for "${shop.business_name || shop.name}" (UTR: ${shop.payment_utr})?\n\nThis will add +28 days to the store's subscription.`)) return;
+    const confirmPrompt = isTopup
+      ? `Confirm TOP-UP payment of ₹${expectedAmount} for "${shop.business_name || shop.name}"?\n\nThis will add +${topupPages} pages to their quota WITHOUT altering their validity days.`
+      : `Confirm PLAN RENEWAL payment of ₹${expectedAmount} for "${shop.business_name || shop.name}"?\n\nThis will add +28 DAYS to their current remaining validity (no days lost).`;
 
-    // Calculate Extended Subscription Date (+28 Days)
-    const currentEnd = shop.subscription_end ? new Date(shop.subscription_end) : new Date();
-    const baseDate = currentEnd.getTime() > Date.now() ? currentEnd : new Date();
-    const newEndDate = new Date(baseDate.getTime() + 28 * 24 * 60 * 60 * 1000);
+    if (!confirm(confirmPrompt)) return;
+
+    let updatePayload: any = {
+      payment_verified: true,
+      subscription_status: 'active',
+      is_paused: false,
+      payment_utr: shop.payment_utr, // keep verified ref
+      pending_action_type: null,
+      pending_action_pages: null,
+      pending_action_amount: null,
+    };
+
+    if (isTopup) {
+      // Top-up: Add pages to existing limit, DO NOT change subscription_end
+      const currentLimit = Number(shop.page_limit || 500);
+      updatePayload.page_limit = currentLimit + topupPages;
+    } else {
+      // Plan Renew: Add +28 Days on top of existing remaining time
+      const currentEnd = shop.subscription_end ? new Date(shop.subscription_end) : new Date();
+      const baseDate = currentEnd.getTime() > Date.now() ? currentEnd : new Date();
+      const newEndDate = new Date(baseDate.getTime() + 28 * 24 * 60 * 60 * 1000);
+
+      updatePayload.subscription_end = newEndDate.toISOString();
+      if (shop.pending_action_plan) {
+        updatePayload.plan_type = shop.pending_action_plan;
+        if (shop.pending_action_plan === 'premium') {
+          updatePayload.page_limit = 999999;
+        }
+      }
+    }
 
     const { error } = await supabase
       .from('shops')
-      .update({
-        payment_verified: true,
-        subscription_status: 'active',
-        is_paused: false,
-        subscription_end: newEndDate.toISOString(),
-      })
+      .update(updatePayload)
       .eq('id', shop.id);
 
     if (error) {
@@ -242,9 +261,10 @@ export default function AdminSuperDashboard() {
       return;
     }
 
-    // Auto-credit Partner Commission if referred
-    if (shop.referred_by_code && !shop.commission_credited) {
-      const commission = planType === 'PREMIUM' ? 150 : 100;
+    // Auto-credit Partner Commission if first time referred
+    if (shop.referred_by_code && !shop.commission_credited && !isTopup) {
+      const plan = (shop.plan_type || 'standard').toLowerCase();
+      const commission = plan === 'premium' ? 150 : 100;
 
       try {
         const { data: partner } = await supabase
@@ -275,34 +295,31 @@ export default function AdminSuperDashboard() {
             )
           );
         }
-      } catch (e) {
-        console.error('Commission credit error:', e);
-      }
+      } catch (e) {}
     }
 
     setShops((prev) =>
-      prev.map((s) =>
-        s.id === shop.id
-          ? {
-              ...s,
-              payment_verified: true,
-              is_paused: false,
-              commission_credited: true,
-              subscription_end: newEndDate.toISOString(),
-            }
-          : s
-      )
+      prev.map((s) => (s.id === shop.id ? { ...s, ...updatePayload } : s))
+    );
+
+    alert(
+      isTopup
+        ? `✓ Top-up Approved! +${topupPages} pages added to "${shop.business_name || shop.name}". Days remaining untouched.`
+        : `✓ Plan Renewed! +28 days successfully appended to "${shop.business_name || shop.name}".`
     );
   };
 
   const handleRejectUtr = async (shop: any) => {
-    if (!confirm(`REJECT payment for "${shop.business_name || shop.name}"? This will clear the submitted UTR.`)) return;
+    if (!confirm(`REJECT submitted payment for "${shop.business_name || shop.name}"? This will clear the pending request.`)) return;
 
     const { error } = await supabase
       .from('shops')
       .update({
         payment_verified: false,
         payment_utr: null,
+        pending_action_type: null,
+        pending_action_pages: null,
+        pending_action_amount: null,
       })
       .eq('id', shop.id);
 
@@ -381,7 +398,7 @@ export default function AdminSuperDashboard() {
   const handleToggleShopPause = async (shop: any) => {
     const willPause = !shop.is_paused;
     const confirmMsg = willPause
-      ? `Are you sure you want to PAUSE store "${shop.business_name || shop.name}"? Their agent and customer portal will be locked immediately.`
+      ? `Are you sure you want to PAUSE store "${shop.business_name || shop.name}"?`
       : `Resume subscription for store "${shop.business_name || shop.name}"?`;
 
     if (!confirm(confirmMsg)) return;
@@ -521,9 +538,6 @@ export default function AdminSuperDashboard() {
 
   const pendingUtrShops = shops.filter((s) => s.payment_utr && s.payment_verified !== true);
 
-  // ==========================================
-  // CALCULATIONS: AGENTS DOMAIN
-  // ==========================================
   let totalPaidToAgentsLifetime = 0;
   let totalPaidToAgentsMonth = 0;
 
@@ -541,7 +555,6 @@ export default function AdminSuperDashboard() {
 
   const totalShopsAddedByAgents = shops.filter((s) => Boolean(s.referred_by_code)).length;
 
-  // Filtered lists
   const filteredShops = shops.filter(
     (s) =>
       s.business_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -574,7 +587,7 @@ export default function AdminSuperDashboard() {
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Live Fleet Control, Partner Agents Network & Subscription Verification
+              Live Fleet Control, Quota Approvals, Partner Payouts & Directory
             </p>
           </div>
 
@@ -588,7 +601,7 @@ export default function AdminSuperDashboard() {
           </div>
         </header>
 
-        {/* 1. PENDING PARTNER PAYOUT NOTIFICATION (WITH INSTANT SCAN QR) */}
+        {/* 1. PENDING PARTNER PAYOUT NOTIFICATION */}
         {pendingPayouts.length > 0 && (
           <div className="bg-gradient-to-r from-indigo-950/70 via-[#0b1021] to-[#070b18] border-2 border-indigo-500/50 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4 animate-in fade-in duration-300">
             <div className="flex items-center justify-between">
@@ -662,26 +675,26 @@ export default function AdminSuperDashboard() {
           </div>
         )}
 
-        {/* 2. PENDING SHOP UTR ALERT BOX (WITH EXACT AMOUNT, PLAN & ACTION CONTEXT) */}
+        {/* 2. PENDING SHOP UTR ALERT BOX (DISTINGUISHES TOP-UP VS PLAN RENEWAL) */}
         {pendingUtrShops.length > 0 && (
           <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-5 shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-amber-400 text-lg">⚠️</span>
                 <h2 className="text-sm font-bold text-amber-300 uppercase tracking-wider">
-                  Pending Subscription Verifications ({pendingUtrShops.length} Need Review)
+                  Pending Verification Requests ({pendingUtrShops.length} Need Review)
                 </h2>
               </div>
               <span className="text-[11px] text-amber-200/70 font-sans">
-                Match these 12-digit UTR numbers in your bank statement.
+                Check amount and UTR in your PhonePe / GPay statement.
               </span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {pendingUtrShops.map((ps) => {
-                const planType = (ps.plan_type || 'standard').toUpperCase();
-                const expectedAmt = planType === 'PREMIUM' ? 249 : 149;
-                const isRenewal = Boolean(ps.subscription_end && new Date(ps.subscription_end).getTime() > 0);
+                const isTopup = ps.pending_action_type === 'quota_topup';
+                const topupPages = ps.pending_action_pages || 100;
+                const expectedPrice = ps.pending_action_amount || (isTopup ? 50 : (ps.plan_type === 'premium' ? 249 : 149));
 
                 return (
                   <div key={ps.id} className="bg-[#070b18] border border-slate-800 rounded-xl p-4 space-y-3 relative overflow-hidden">
@@ -691,32 +704,40 @@ export default function AdminSuperDashboard() {
                         <p className="text-[10px] text-slate-400">{ps.owner_name} • {ps.phone}</p>
                         {ps.referred_by_code && (
                           <p className="text-[10px] text-indigo-400 font-mono mt-0.5">
-                            Code: {ps.referred_by_code} (+₹{planType === 'PREMIUM' ? 150 : 100} Comm.)
+                            Partner Code: {ps.referred_by_code}
                           </p>
                         )}
                       </div>
                       
-                      {/* Price & Plan Tag */}
+                      {/* Price & Badge */}
                       <div className="text-right">
                         <span className={`text-[9px] font-mono font-bold uppercase px-2 py-0.5 rounded border inline-block ${
-                          planType === 'PREMIUM'
-                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                          isTopup
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
                             : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
                         }`}>
-                          {planType}
+                          {isTopup ? 'QUOTA TOP-UP' : (ps.plan_type || 'STANDARD').toUpperCase()}
                         </span>
                         <div className="text-base font-black font-mono text-emerald-400 pt-0.5">
-                          ₹{expectedAmt}
+                          ₹{expectedPrice}
                         </div>
                       </div>
                     </div>
 
-                    {/* Context Tag: Renewal or New Activation */}
-                    <div className="flex items-center justify-between text-[10px] px-2.5 py-1 bg-slate-900/60 rounded border border-slate-800">
-                      <span className="text-slate-400">Action:</span>
-                      <span className="font-bold text-indigo-300">
-                        {isRenewal ? 'Plan Renewal / Quota Top-Up (+28 Days)' : 'New Merchant Activation'}
-                      </span>
+                    {/* Exact Action Details */}
+                    <div className="text-[10px] p-2 bg-slate-900/90 rounded-lg border border-slate-800 space-y-0.5">
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Request Type:</span>
+                        <span className="font-bold text-white">
+                          {isTopup ? `Add +${topupPages} Pages` : 'Extend +28 Days Plan'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-slate-400 text-[9px]">
+                        <span>Days Effect:</span>
+                        <span className={isTopup ? 'text-amber-300 font-semibold' : 'text-emerald-400 font-semibold'}>
+                          {isTopup ? 'No days added (Quota only)' : '+28 Days Added to Balance'}
+                        </span>
+                      </div>
                     </div>
 
                     <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800 space-y-1">
@@ -733,7 +754,7 @@ export default function AdminSuperDashboard() {
                         onClick={() => handleApproveUtr(ps)}
                         className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] rounded-lg transition-all shadow cursor-pointer"
                       >
-                        ✓ Verify & Approve (+28D)
+                        {isTopup ? `✓ Approve (+${topupPages} Pgs)` : '✓ Approve (+28 Days)'}
                       </button>
                       <button
                         onClick={() => handleRejectUtr(ps)}
@@ -751,8 +772,6 @@ export default function AdminSuperDashboard() {
 
         {/* ROW: DYNAMIC ADMIN RECEIVER UPI & SPOOLER DRIVE LINK */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          
-          {/* ADMIN RECEIVER UPI */}
           <div className="bg-[#0b1021] border border-emerald-500/30 rounded-2xl p-5 shadow-xl space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -763,7 +782,7 @@ export default function AdminSuperDashboard() {
               </div>
             </div>
             <p className="text-[11px] text-slate-400">
-              Money paid by new shopkeepers for Standard/Premium plans lands directly in this UPI.
+              Money paid by new shopkeepers for Top-Up and Plans lands directly in this UPI.
             </p>
 
             <div className="flex items-center gap-3 pt-1">
@@ -788,7 +807,6 @@ export default function AdminSuperDashboard() {
             )}
           </div>
 
-          {/* SPOOLER PACKAGE URL */}
           <div className="bg-[#0b1021] border border-indigo-500/30 rounded-2xl p-5 shadow-xl space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
@@ -833,12 +851,9 @@ export default function AdminSuperDashboard() {
               <p className="text-xs text-emerald-400 font-semibold pt-1">{urlStatusMsg}</p>
             )}
           </div>
-
         </div>
 
-        {/* ========================================================================= */}
-        {/* MAIN SECTION SWITCHER TABS (RIGHT BELOW THE 2 BOXES)                     */}
-        {/* ========================================================================= */}
+        {/* SECTION SWITCHER TABS */}
         <div className="flex items-center justify-start gap-3 pt-2">
           <div className="bg-[#070b18] p-1.5 rounded-2xl border border-slate-800 flex items-center shadow-lg">
             <button
@@ -875,13 +890,9 @@ export default function AdminSuperDashboard() {
           </div>
         </div>
 
-        {/* ========================================================================= */}
-        {/* VIEW 1: SHOPS DOMAIN (METRICS + SHOPS DIRECTORY)                         */}
-        {/* ========================================================================= */}
+        {/* SHOPS TAB VIEW */}
         {adminView === 'shops' && (
           <div className="space-y-6 animate-in fade-in duration-200">
-            
-            {/* 4 SHOPS METRIC CARDS */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-[#0b1021] border border-emerald-500/30 rounded-2xl p-4 shadow-lg">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
@@ -933,7 +944,6 @@ export default function AdminSuperDashboard() {
               </div>
             </div>
 
-            {/* SHOPS DIRECTORY TABLE */}
             <div className="bg-[#0b1021] border border-slate-800 rounded-3xl overflow-hidden shadow-2xl p-5 sm:p-6 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-xs font-bold text-white uppercase tracking-wider">
@@ -953,7 +963,7 @@ export default function AdminSuperDashboard() {
                   <thead>
                     <tr className="bg-[#070b18] text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-800">
                       <th className="p-3.5">Store Details</th>
-                      <th className="p-3.5">Plan & UTR Verification</th>
+                      <th className="p-3.5">Plan & Validity</th>
                       <th className="p-3.5">Referral Partner</th>
                       <th className="p-3.5">Counter Telemetry</th>
                       <th className="p-3.5">Credentials</th>
@@ -977,7 +987,6 @@ export default function AdminSuperDashboard() {
                         : Math.ceil((subEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
                       const planType = (s.plan_type || 'trial').toUpperCase();
                       const isPaused = Boolean(s.is_paused);
-                      const isUtrVerified = s.payment_verified === true;
 
                       return (
                         <tr key={s.id} className="hover:bg-slate-800/20 transition-colors">
@@ -1026,60 +1035,17 @@ export default function AdminSuperDashboard() {
                                   </span>
                                 )}
                               </div>
-
-                              {s.payment_utr ? (
-                                <div className="space-y-1">
-                                  <div className="text-[10px] font-mono text-slate-300 bg-slate-900 px-2 py-1 rounded border border-slate-800 flex items-center justify-between gap-1">
-                                    <span className="text-slate-500">UTR:</span>
-                                    <span className="font-bold text-amber-400 select-all tracking-wider">{s.payment_utr}</span>
-                                  </div>
-                                  {isUtrVerified ? (
-                                    <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 block w-fit">
-                                      ✓ VERIFIED
-                                    </span>
-                                  ) : (
-                                    <div className="flex items-center gap-1.5 pt-0.5">
-                                      <button
-                                        onClick={() => handleApproveUtr(s)}
-                                        className="text-[10px] bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded font-bold transition-all cursor-pointer"
-                                      >
-                                        ✓ Approve (+28D)
-                                      </button>
-                                      <button
-                                        onClick={() => handleRejectUtr(s)}
-                                        className="text-[10px] bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded font-bold transition-all cursor-pointer"
-                                      >
-                                        ✕ Reject
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
-                              ) : planType === 'TRIAL' ? (
-                                <span className="text-[10px] text-slate-500 font-mono block">Free Trial Plan</span>
-                              ) : (
-                                <span className="text-[10px] text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded font-mono block w-fit">
-                                  ⚠️ UTR Missing
-                                </span>
-                              )}
+                              <div className="text-[10px] text-slate-400 font-mono">
+                                Quota: {s.page_limit} Pages
+                              </div>
                             </div>
                           </td>
 
                           <td className="p-3.5">
                             {s.referred_by_code ? (
-                              <div className="space-y-1">
-                                <span className="font-mono text-xs font-bold text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded block w-fit">
-                                  {s.referred_by_code}
-                                </span>
-                                {s.commission_credited ? (
-                                  <span className="text-[10px] text-emerald-400 font-bold block">
-                                    ✓ Commission Paid
-                                  </span>
-                                ) : (
-                                  <span className="text-[10px] text-amber-400 font-semibold block">
-                                    ⏳ Pending Approval
-                                  </span>
-                                )}
-                              </div>
+                              <span className="font-mono text-xs font-bold text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded block w-fit">
+                                {s.referred_by_code}
+                              </span>
                             ) : (
                               <span className="text-slate-600 text-[11px]">Direct Organic</span>
                             )}
@@ -1146,9 +1112,7 @@ export default function AdminSuperDashboard() {
           </div>
         )}
 
-        {/* ========================================================================= */}
-        {/* VIEW 2: AGENTS DOMAIN (DEDICATED AGENT STATS + AGENTS DIRECTORY)         */}
-        {/* ========================================================================= */}
+        {/* AGENTS TAB VIEW */}
         {adminView === 'agents' && (
           <div className="space-y-6 animate-in fade-in duration-200">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
