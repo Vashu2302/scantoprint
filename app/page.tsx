@@ -8,8 +8,18 @@ export default function HomePage() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [selectedPlan, setSelectedPlan] = useState<'trial' | 'standard' | 'premium'>('standard');
 
+  // Mouse Glow Movement Tracker
+  const [cursorPos, setCursorPos] = useState({ x: -200, y: -200 });
+
   useEffect(() => {
-    document.title = 'ScanToPrint • Instant Zero-Touch Printing';
+    document.title = 'ScanToPrint • Instant Cloud Document Printing';
+
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      setCursorPos({ x: e.clientX, y: e.clientY });
+    };
+
+    window.addEventListener('mousemove', handleGlobalMouseMove);
+    return () => window.removeEventListener('mousemove', handleGlobalMouseMove);
   }, []);
 
   const scrollToPlans = (e: React.MouseEvent) => {
@@ -21,7 +31,16 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#070b14] text-slate-100 selection:bg-indigo-500 selection:text-white scroll-smooth">
+    <div className="min-h-screen bg-[#070b14] text-slate-100 selection:bg-indigo-500 selection:text-white scroll-smooth relative overflow-hidden">
+      {/* Interactive Mouse Glow Spotlight Effect */}
+      <div
+        className="pointer-events-none fixed -translate-x-1/2 -translate-y-1/2 w-[350px] h-[350px] rounded-full bg-indigo-600/10 blur-[100px] z-30 transition-transform duration-75 ease-out"
+        style={{
+          left: `${cursorPos.x}px`,
+          top: `${cursorPos.y}px`,
+        }}
+      />
+
       {/* Top Navbar */}
       <header className="sticky top-0 z-50 backdrop-blur-xl bg-[#070b14]/80 border-b border-slate-800/80 px-6 sm:px-12 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -72,7 +91,7 @@ export default function HomePage() {
           </span>
         </h1>
         <p className="text-sm sm:text-base text-slate-400 max-w-2xl mx-auto leading-relaxed">
-          Empower photocopy and print shop owners with zero-touch order processing. Instant UPI payments, and local desktop print auto-sync on scantoprint.in.
+          Empower photocopy and print shop owners with rapid queue processing, direct UPI payments, and silent local desktop printing on scantoprint.in.
         </p>
 
         <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
@@ -378,7 +397,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* NEW: PARTNER & CAMPUS AMBASSADOR SECTION */}
+      {/* PARTNER & CAMPUS AMBASSADOR SECTION */}
       <section id="partner" className="max-w-6xl mx-auto px-6 py-16 scroll-mt-16">
         <div className="bg-gradient-to-r from-indigo-950/70 via-[#0e1628] to-[#070b18] border-2 border-indigo-500/40 rounded-3xl p-8 sm:p-12 shadow-2xl relative overflow-hidden">
           <div className="absolute top-0 right-0 -mt-8 -mr-8 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
