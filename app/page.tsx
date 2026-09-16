@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import InteractiveWorkflow from '@/components/InteractiveWorkflow';
 
 export default function HomePage() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
@@ -93,56 +94,9 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 1. End-to-End Workflow */}
-      <section id="workflow" className="max-w-6xl mx-auto px-6 py-16 space-y-8">
-        <div className="text-center space-y-2">
-          <h2 className="text-2xl sm:text-3xl font-black text-white">End-to-End Workflow</h2>
-          <p className="text-xs sm:text-sm text-slate-400">
-            How customers seamlessly print documents without manual staff handling.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          <div className="p-6 rounded-2xl bg-[#0e1626]/80 border border-slate-800/90 space-y-3">
-            <div className="h-10 w-10 rounded-xl bg-indigo-950/70 border border-indigo-700/40 flex items-center justify-center text-lg">
-              📱
-            </div>
-            <h3 className="text-sm font-bold text-white">QR Code Scan</h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Customers scan the unique dynamic QR code placed outside or inside the registered photocopy shop.
-            </p>
-          </div>
-
-          <div className="p-6 rounded-2xl bg-[#0e1626]/80 border border-slate-800/90 space-y-3">
-            <div className="h-10 w-10 rounded-xl bg-indigo-950/70 border border-indigo-700/40 flex items-center justify-center text-lg">
-              ⚙️
-            </div>
-            <h3 className="text-sm font-bold text-white">Upload & Configure</h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Opens shop web portal. User uploads PDF/Image, selects A4/color/copies options, and sees instant pricing.
-            </p>
-          </div>
-
-          <div className="p-6 rounded-2xl bg-[#0e1626]/80 border border-slate-800/90 space-y-3">
-            <div className="h-10 w-10 rounded-xl bg-indigo-950/70 border border-indigo-700/40 flex items-center justify-center text-lg">
-              💳
-            </div>
-            <h3 className="text-sm font-bold text-white">Instant UPI Payment</h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Customer completes payment via UPI app. System instantly validates and queues the transaction.
-            </p>
-          </div>
-
-          <div className="p-6 rounded-2xl bg-[#0e1626]/80 border border-slate-800/90 space-y-3">
-            <div className="h-10 w-10 rounded-xl bg-indigo-950/70 border border-indigo-700/40 flex items-center justify-center text-lg">
-              🖨️
-            </div>
-            <h3 className="text-sm font-bold text-white">Auto-Trigger Print</h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Local desktop agent pulls file from cloud storage and pushes it silently to the connected printer.
-            </p>
-          </div>
-        </div>
+      {/* 1. End-to-End Visual Workflow & Animated Engine */}
+      <section id="workflow" className="max-w-6xl mx-auto px-6 py-16 scroll-mt-16">
+        <InteractiveWorkflow />
       </section>
 
       {/* 2. Smart Cloud Features */}
