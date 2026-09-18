@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 
@@ -8,6 +8,13 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
+
+interface TourAnchorRect {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+}
 
 export default function VashuExactMerchantDashboard() {
   const params = useParams();
@@ -19,9 +26,10 @@ export default function VashuExactMerchantDashboard() {
   const [loading, setLoading] = useState(true);
   const [baseUrl, setBaseUrl] = useState('https://scantoprint.in');
 
-  // Interactive 4-Step Spotlight Tour State
+  // Interactive In-Place Spotlight Tour
   const [tourActive, setTourActive] = useState(false);
   const [tourStep, setTourStep] = useState<number>(1);
+  const [anchorRect, setAnchorRect] = useState<TourAnchorRect | null>(null);
 
   const [pricing, setPricing] = useState({
     bwSingle: 2,
@@ -55,7 +63,6 @@ export default function VashuExactMerchantDashboard() {
       const name = shop.business_name || shop.name || 'Store';
       document.title = `${name} • Counter Dashboard | ScanToPrint`;
 
-      // Auto-trigger tour on first login if not completed
       const tourFinished = localStorage.getItem(`stp_tour_done_${slug}`);
       if (!tourFinished) {
         setTourActive(true);
@@ -63,6 +70,51 @@ export default function VashuExactMerchantDashboard() {
       }
     }
   }, [shop, slug]);
+
+  // Position calculation for floating popups attached to target elements
+  const updateTargetAnchor = (elementId: string) => {
+    if (typeof window === 'undefined') return;
+    const elem = document.getElementById(elementId);
+    if (elem) {
+      const rect = elem.getBoundingClientRect();
+      setAnchorRect({
+        top: rect.top + window.scrollY,
+        left: rect.left + window.scrollX,
+        width: rect.width,
+        height: rect.height,
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (!tourActive) {
+      setAnchorRect(null);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      if (tourStep === 1) updateTargetAnchor('tour-standee-tab');
+      if (tourStep === 2) updateTargetAnchor('tour-agent-key-box');
+      if (tourStep === 3) updateTargetAnchor('tour-pricing-tab');
+      if (tourStep === 4) updateTargetAnchor('tour-subscription-box');
+    }, 150);
+
+    const handleResize = () => {
+      if (tourStep === 1) updateTargetAnchor('tour-standee-tab');
+      if (tourStep === 2) updateTargetAnchor('tour-agent-key-box');
+      if (tourStep === 3) updateTargetAnchor('tour-pricing-tab');
+      if (tourStep === 4) updateTargetAnchor('tour-subscription-box');
+    };
+
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('scroll', handleResize);
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('scroll', handleResize);
+    };
+  }, [tourActive, tourStep, activeTab]);
 
   useEffect(() => {
     async function loadAdminUpi() {
@@ -213,7 +265,6 @@ export default function VashuExactMerchantDashboard() {
     }
   };
 
-  // Submit UTR for either Quota Top-Up or Plan Renewal
   const handleSubmitPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!shop) return;
@@ -249,8 +300,8 @@ export default function VashuExactMerchantDashboard() {
 
       setRenewSuccessMsg(
         modalMode === 'topup'
-          ? `✓ UTR submitted for +${selectedTopup.pages} Pages Top-Up! Admin approval will add pages without altering days.`
-          : `✓ UTR submitted for Plan Renewal! Admin approval will add +28 days to your remaining validity.`
+          ? `✓ UTR submitted for +${selectedTopup.pages} Pages Top-Up! Admin approval will add quota without altering days.`
+          : `✓ UTR submitted for Plan Renewal! Admin approval will add +28 days without wasting remaining days.`
       );
 
       setTimeout(() => {
@@ -265,7 +316,6 @@ export default function VashuExactMerchantDashboard() {
     }
   };
 
-  // Close & Save Tour Status
   const handleFinishTour = () => {
     setTourActive(false);
     localStorage.setItem(`stp_tour_done_${slug}`, 'true');
@@ -363,14 +413,36 @@ export default function VashuExactMerchantDashboard() {
           #printable-standee-container { display: flex !important; justify-content: center !important; align-items: center !important; width: 100% !important; min-height: 90vh !important; margin: 0 auto !important; padding: 0 !important; }
           #printable-standee { box-shadow: none !important; break-inside: avoid !important; page-break-inside: avoid !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; transform: scale(1.05); }
         }
+
+        /* Subtle 15% Dimming during Tour (Crystal Clear Visibility) */
+        .tour-dim-active {
+          opacity: 0.82 !important;
+          transition: opacity 0.2s ease-in-out;
+        }
+
+        /* Animated Golden Border for Highlighted Elements */
+        .tour-golden-highlight {
+          position: relative !important;
+          z-index: 50 !important;
+          border-color: #f59e0b !important;
+          box-shadow: 0 0 0 2px #f59e0b, 0 0 20px rgba(245, 158, 11, 0.45) !important;
+          animation: pulseGoldenBorder 1.5s infinite alternate ease-in-out !important;
+        }
+
+        @keyframes pulseGoldenBorder {
+          from {
+            box-shadow: 0 0 0 2px #f59e0b, 0 0 12px rgba(245, 158, 11, 0.35);
+          }
+          to {
+            box-shadow: 0 0 0 3px #fbbf24, 0 0 26px rgba(251, 191, 36, 0.75);
+          }
+        }
       `}</style>
 
       {/* ------------------------------------------------------------- */}
-      {/* RESPONSIVE HEADER: CLEAN PC ROW + TIDY MOBILE 2-TIER LAYOUT   */}
+      {/* RESPONSIVE HEADER                                             */}
       {/* ------------------------------------------------------------- */}
       <header className="border-b border-slate-800/80 bg-[#090d1c]/95 sticky top-0 z-40 backdrop-blur-xl no-print">
-        
-        {/* Tier 1: Branding, Link & User Controls */}
         <div className="px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-xs sm:text-sm shadow-md shadow-indigo-600/30 shrink-0">
@@ -396,13 +468,12 @@ export default function VashuExactMerchantDashboard() {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {/* Guide Reopen Button */}
             <button
               onClick={() => {
                 setTourStep(1);
                 setTourActive(true);
               }}
-              className="px-2.5 py-1.5 rounded-lg bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-all"
+              className="px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-all"
               title="Start Interactive Guide"
             >
               <span>❓</span>
@@ -418,9 +489,8 @@ export default function VashuExactMerchantDashboard() {
           </div>
         </div>
 
-        {/* Tier 2: Responsive Action Bar (Horizontal Scroll on Mobile, Flex on Desktop) */}
+        {/* Action Row */}
         <div className="px-4 sm:px-6 py-2 border-t border-slate-800/60 bg-[#070b18]/60 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
-          
           <div className="flex items-center gap-2 shrink-0">
             <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold border font-mono ${expiryColorClass}`}>
               <span className={`w-1.5 h-1.5 rounded-full ${expiryDotClass}`}></span>
@@ -467,27 +537,20 @@ export default function VashuExactMerchantDashboard() {
             <button
               id="tour-spooler-btn"
               onClick={handleDownloadSoftware}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all cursor-pointer whitespace-nowrap ${
-                tourActive && tourStep === 2 ? 'ring-2 ring-indigo-400 bg-indigo-900/60' : ''
-              }`}
+              className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all cursor-pointer whitespace-nowrap"
             >
               ⬇ PC Spooler (.zip)
             </button>
           </div>
 
-          {/* Nav Tabs */}
+          {/* Navigation Tabs */}
           <div className="flex items-center gap-1 bg-[#0b1021] p-0.5 rounded-lg border border-slate-800 shrink-0">
             <button
               id="tour-queue-tab"
-              onClick={() => {
-                setActiveTab('queue');
-                if (tourActive && tourStep === 4) {
-                  // User clicked tab during step 4
-                }
-              }}
+              onClick={() => setActiveTab('queue')}
               className={`px-3 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
                 activeTab === 'queue' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
-              } ${tourActive && tourStep === 4 ? 'ring-2 ring-indigo-400' : ''}`}
+              }`}
             >
               Live Queue
             </button>
@@ -497,12 +560,12 @@ export default function VashuExactMerchantDashboard() {
               onClick={() => {
                 setActiveTab('pricing');
                 if (tourActive && tourStep === 3) {
-                  // Advanced user clicked directly on pricing
+                  setTourStep(4);
                 }
               }}
               className={`px-3 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
                 activeTab === 'pricing' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
-              } ${tourActive && tourStep === 3 ? 'ring-2 ring-indigo-400 bg-indigo-900/60 animate-pulse' : ''}`}
+              } ${tourActive && tourStep === 3 ? 'tour-golden-highlight' : ''}`}
             >
               Pricing Rates
             </button>
@@ -517,17 +580,16 @@ export default function VashuExactMerchantDashboard() {
               }}
               className={`px-3 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
                 activeTab === 'standee' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
-              } ${tourActive && tourStep === 1 ? 'ring-2 ring-indigo-400 bg-indigo-900/60 animate-pulse' : ''}`}
+              } ${tourActive && tourStep === 1 ? 'tour-golden-highlight' : ''}`}
             >
               Store Standee
             </button>
           </div>
-
         </div>
       </header>
 
-      {/* Main Canvas */}
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-5 space-y-5">
+      {/* Main Canvas with Subtle Dimming during tour */}
+      <main className={`max-w-6xl mx-auto px-4 sm:px-6 pt-5 space-y-5 transition-all ${tourActive ? 'tour-dim-active' : ''}`}>
         
         {/* Metric Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 no-print">
@@ -555,7 +617,7 @@ export default function VashuExactMerchantDashboard() {
         <div
           id="tour-subscription-box"
           className={`bg-gradient-to-r from-[#0b1021] via-[#0e1628] to-[#070b18] border rounded-2xl p-4 sm:p-5 shadow-xl flex flex-wrap items-center justify-between gap-4 no-print transition-all ${
-            tourActive && tourStep === 4 ? 'border-indigo-400 ring-2 ring-indigo-400 shadow-indigo-600/30' : 'border-indigo-500/30'
+            tourActive && tourStep === 4 ? 'tour-golden-highlight' : 'border-indigo-500/30'
           }`}
         >
           <div className="flex items-center gap-3.5">
@@ -618,7 +680,7 @@ export default function VashuExactMerchantDashboard() {
         <div
           id="tour-agent-key-box"
           className={`bg-[#0b1021] border rounded-xl p-3 sm:px-4 sm:py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs no-print transition-all ${
-            tourActive && tourStep === 2 ? 'border-indigo-400 ring-2 ring-indigo-400 shadow-lg' : 'border-slate-800/90'
+            tourActive && tourStep === 2 ? 'tour-golden-highlight' : 'border-slate-800/90'
           }`}
         >
           <div className="flex items-center gap-2 min-w-0">
@@ -627,7 +689,7 @@ export default function VashuExactMerchantDashboard() {
               {shop.api_key}
             </span>
           </div>
-          <span className="text-[11px] text-slate-400">Paste this key once inside your Windows spooler app.</span>
+          <span className="text-[11px] text-slate-400">Enter this key once inside the Windows background spooler.</span>
         </div>
 
         {/* TAB 1: LIVE QUEUE */}
@@ -639,7 +701,7 @@ export default function VashuExactMerchantDashboard() {
             </div>
             {orders.length === 0 ? (
               <div className="p-12 text-center text-slate-500 text-xs sm:text-sm">
-                No orders in queue yet. New prints will automatically appear here.
+                No orders in queue yet. New prints will automatically stream here.
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -826,137 +888,149 @@ export default function VashuExactMerchantDashboard() {
       </main>
 
       {/* ------------------------------------------------------------- */}
-      {/* 4-STEP SPOTLIGHT ONBOARDING OVERLAY & GUIDE BOX               */}
+      {/* ATTACHED CONTEXTUAL MICRO-POPUP (FLOATS EXACTLY BELOW TARGET) */}
       {/* ------------------------------------------------------------- */}
-      {tourActive && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-[2px] flex items-end sm:items-center justify-center p-4 no-print animate-in fade-in duration-200 pointer-events-none">
-          <div className="bg-[#0b1021] border-2 border-indigo-500/80 rounded-3xl p-5 sm:p-6 max-w-md w-full shadow-2xl space-y-4 relative pointer-events-auto">
-            
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
-              <span className="text-[10px] font-bold font-mono uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                Step {tourStep} of 4 • Quick Setup
-              </span>
-              <button
-                onClick={handleFinishTour}
-                className="text-xs text-slate-400 hover:text-white cursor-pointer"
-              >
-                Skip ✕
-              </button>
-            </div>
+      {tourActive && anchorRect && (
+        <div
+          style={{
+            position: 'absolute',
+            top: `${anchorRect.top + anchorRect.height + 12}px`,
+            left: `${Math.max(12, Math.min(anchorRect.left + anchorRect.width / 2 - 160, typeof window !== 'undefined' ? window.innerWidth - 340 : anchorRect.left))}px`,
+            zIndex: 9999,
+          }}
+          className="w-80 sm:w-84 bg-[#0a0f1e] border-2 border-amber-400 rounded-2xl p-4 shadow-2xl shadow-amber-500/20 space-y-3 animate-in fade-in zoom-in-95 duration-150 no-print"
+        >
+          {/* Arrow pointing up to target */}
+          <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 w-4 h-4 bg-[#0a0f1e] border-t-2 border-l-2 border-amber-400 rotate-45"></div>
 
-            {/* STEP 1 GUIDE */}
-            {tourStep === 1 && (
-              <div className="space-y-2">
-                <h3 className="text-base font-black text-white">
-                  Click Here: Print Store Standee
-                </h3>
-                <p className="text-xs text-slate-300 leading-relaxed">
-                  Click the glowing <strong>&apos;Store Standee&apos;</strong> tab above. Print and place this QR on your shop counter so customers can scan and upload files.
-                </p>
-                <div className="pt-2 flex items-center justify-between">
-                  <span className="text-[11px] text-amber-400 font-semibold animate-pulse">
-                    👉 Click &apos;Store Standee&apos; tab above
-                  </span>
-                  <button
-                    onClick={() => {
-                      setActiveTab('standee');
-                      setTourStep(2);
-                    }}
-                    className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl cursor-pointer"
-                  >
-                    Next ➔
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* STEP 2 GUIDE */}
-            {tourStep === 2 && (
-              <div className="space-y-2">
-                <h3 className="text-base font-black text-white">
-                  Connect Your PC &amp; Printer
-                </h3>
-                <p className="text-xs text-slate-300 leading-relaxed">
-                  1. Click <strong>&apos;PC Spooler (.zip)&apos;</strong> to download the Windows software.<br />
-                  2. Extract the zip file and paste your <strong>Agent Key</strong> once into the app.
-                </p>
-                <div className="pt-2 flex items-center justify-between">
-                  <button
-                    onClick={() => setTourStep(1)}
-                    className="text-xs text-slate-400 hover:text-white cursor-pointer"
-                  >
-                    ← Back
-                  </button>
-                  <button
-                    onClick={() => {
-                      setActiveTab('pricing');
-                      setTourStep(3);
-                    }}
-                    className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl cursor-pointer"
-                  >
-                    Next Step ➔
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* STEP 3 GUIDE */}
-            {tourStep === 3 && (
-              <div className="space-y-2">
-                <h3 className="text-base font-black text-white">
-                  Click Here: Set Your Print Prices
-                </h3>
-                <p className="text-xs text-slate-300 leading-relaxed">
-                  Click <strong>&apos;Pricing Rates&apos;</strong> tab above. You can change rates for B&amp;W and Color prints here. Click <strong>&apos;Save New Rates&apos;</strong> to update everywhere instantly.
-                </p>
-                <div className="pt-2 flex items-center justify-between">
-                  <button
-                    onClick={() => setTourStep(2)}
-                    className="text-xs text-slate-400 hover:text-white cursor-pointer"
-                  >
-                    ← Back
-                  </button>
-                  <button
-                    onClick={() => {
-                      setActiveTab('queue');
-                      setTourStep(4);
-                    }}
-                    className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl cursor-pointer"
-                  >
-                    Next Step ➔
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* STEP 4 GUIDE (ALL-IN-ONE SUBSCRIPTION & LIVE QUEUE) */}
-            {tourStep === 4 && (
-              <div className="space-y-2">
-                <h3 className="text-base font-black text-white">
-                  Subscription &amp; Live Print Orders
-                </h3>
-                <p className="text-xs text-slate-300 leading-relaxed">
-                  • Check remaining validity days above. Click <strong>&apos;Top-Up&apos;</strong> for extra pages or <strong>&apos;Renew&apos;</strong> to extend days.<br />
-                  • All incoming customer prints will stream below under <strong>&apos;Live Queue&apos;</strong> and print out automatically!
-                </p>
-                <div className="pt-3 flex items-center justify-between">
-                  <button
-                    onClick={() => setTourStep(3)}
-                    className="text-xs text-slate-400 hover:text-white cursor-pointer"
-                  >
-                    ← Back
-                  </button>
-                  <button
-                    onClick={handleFinishTour}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition-all shadow cursor-pointer"
-                  >
-                    Done! Start Printing 🚀
-                  </button>
-                </div>
-              </div>
-            )}
-
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+            <span className="text-[10px] font-bold font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
+              Step {tourStep} of 4
+            </span>
+            <button
+              onClick={handleFinishTour}
+              className="text-xs text-slate-400 hover:text-white cursor-pointer"
+            >
+              Skip ✕
+            </button>
           </div>
+
+          {/* STEP 1 */}
+          {tourStep === 1 && (
+            <div className="space-y-2">
+              <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
+                <span>🪧</span>
+                <span>Click Here: Print Store Standee</span>
+              </h4>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                Click this button to see your store standee. Print and place this QR on your shop counter so customers can scan and print.
+              </p>
+              <div className="pt-2 flex items-center justify-between">
+                <span className="text-[10px] text-amber-400 font-bold animate-pulse">
+                  👆 Click glowing tab above
+                </span>
+                <button
+                  onClick={() => {
+                    setActiveTab('standee');
+                    setTourStep(2);
+                  }}
+                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs rounded-xl cursor-pointer"
+                >
+                  Next Step ➔
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 2 */}
+          {tourStep === 2 && (
+            <div className="space-y-2">
+              <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
+                <span>💻</span>
+                <span>Connect Your PC &amp; Printer</span>
+              </h4>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                1. Click <strong>&apos;PC Spooler (.zip)&apos;</strong> to download app on your counter PC.<br />
+                2. Run it and paste this Agent Key once.<br />
+                Your printer is now connected.
+              </p>
+              <div className="pt-2 flex items-center justify-between">
+                <button
+                  onClick={() => setTourStep(1)}
+                  className="text-xs text-slate-400 hover:text-white cursor-pointer"
+                >
+                  ← Back
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveTab('pricing');
+                    setTourStep(3);
+                  }}
+                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs rounded-xl cursor-pointer"
+                >
+                  Next Step ➔
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 3 */}
+          {tourStep === 3 && (
+            <div className="space-y-2">
+              <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
+                <span>🏷️</span>
+                <span>Click Here: Set Your Print Prices</span>
+              </h4>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                Click this button to set your rates. You can change prices for Black &amp; White and Color prints here. Click &apos;Save&apos; and your new rates will update everywhere instantly.
+              </p>
+              <div className="pt-2 flex items-center justify-between">
+                <button
+                  onClick={() => setTourStep(2)}
+                  className="text-xs text-slate-400 hover:text-white cursor-pointer"
+                >
+                  ← Back
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveTab('queue');
+                    setTourStep(4);
+                  }}
+                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs rounded-xl cursor-pointer"
+                >
+                  Next Step ➔
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 4 */}
+          {tourStep === 4 && (
+            <div className="space-y-2">
+              <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
+                <span>⚡</span>
+                <span>Subscription &amp; Live Orders</span>
+              </h4>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                • Check remaining validity days here. Click &apos;Top-Up&apos; for extra pages or &apos;Renew&apos; to extend days.<br />
+                • All customer prints will show here in Live Queue and print out automatically.
+              </p>
+              <div className="pt-2 flex items-center justify-between">
+                <button
+                  onClick={() => setTourStep(3)}
+                  className="text-xs text-slate-400 hover:text-white cursor-pointer"
+                >
+                  ← Back
+                </button>
+                <button
+                  onClick={handleFinishTour}
+                  className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs rounded-xl shadow cursor-pointer"
+                >
+                  Done! Start Using 🚀
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
