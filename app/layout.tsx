@@ -1,23 +1,39 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+import type { Metadata } from 'next';
+import './globals.css';
 
 export const metadata: Metadata = {
-  title: {
-    default: "ScanToPrint • Instant Wireless Print Spooler",
-    template: "%s | ScanToPrint",
+  title: 'ScanToPrint • Instant Wireless Counter Printing Software',
+  description: 'ScanToPrint allows xerox and print shops to offer direct wireless customer printing via QR code. Fast, private, and automated document printing.',
+  keywords: [
+    'scantoprint',
+    'scan to print',
+    'scantoprint in',
+    'wireless counter printing',
+    'xerox shop print software',
+    'qr code printing shop',
+    'instant document print counter',
+    'counter print software india'
+  ],
+  metadataBase: new URL('https://scantoprint.in'),
+  alternates: {
+    canonical: 'https://scantoprint.in',
   },
-  description: "Autonomous zero-touch wireless print counter & spooling cloud network.",
+  openGraph: {
+    title: 'ScanToPrint • Wireless Counter Printing Software',
+    description: 'Direct wireless customer printing via QR code for print shops.',
+    url: 'https://scantoprint.in',
+    siteName: 'ScanToPrint',
+    locale: 'en_IN',
+    type: 'website',
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+    },
+  },
 };
 
 export default function RootLayout({
@@ -26,11 +42,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col bg-[#060813] text-slate-100">{children}</body>
+    <html lang="en">
+      <body>{children}</body>
     </html>
   );
 }
