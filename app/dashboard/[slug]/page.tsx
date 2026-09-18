@@ -223,12 +223,13 @@ export default function VashuExactMerchantDashboard() {
     setSecurityModalOpen(true);
   };
 
-  // Request UPI Change (triggers Password Auth Modal)
+  // Request UPI Change: closes edit modal and smoothly opens password verification
   const handleRequestSaveUpi = () => {
     if (!newUpiId.trim() || !newUpiId.includes('@')) {
       alert('Please enter a valid UPI ID (e.g. name@okhdfcbank or 9826xxxxxx@ybl).');
       return;
     }
+    setIsEditUpiOpen(false); // Seamlessly dismiss first modal
     setSecurityAction('save_upi');
     setSecurityPassword('');
     setSecurityError('');
@@ -273,7 +274,6 @@ export default function VashuExactMerchantDashboard() {
 
         if (error) throw error;
         setShop({ ...shop, upi_id: newUpiId.trim() });
-        setIsEditUpiOpen(false);
       }
 
       setSecurityModalOpen(false);
@@ -473,6 +473,15 @@ export default function VashuExactMerchantDashboard() {
   const renewDeepLink = `upi://pay?pa=${adminUpi}&pn=ScanToPrint%20Platform&am=${payableAmount}&cu=INR&tn=${encodeURIComponent(paymentNote)}`;
   const renewQrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(renewDeepLink)}`;
 
+  // Precise arrow alignment directly pointing to target element
+  const popupWidth = typeof window !== 'undefined' && window.innerWidth < 640 ? 300 : 340;
+  const popupLeft = anchorRect
+    ? Math.max(12, Math.min(anchorRect.left + anchorRect.width / 2 - popupWidth / 2, typeof window !== 'undefined' ? window.innerWidth - popupWidth - 16 : anchorRect.left))
+    : 12;
+  const arrowLeftOffset = anchorRect
+    ? Math.max(20, Math.min(anchorRect.left + anchorRect.width / 2 - popupLeft, popupWidth - 20))
+    : popupWidth / 2;
+
   return (
     <div className="min-h-screen bg-[#060813] text-slate-200 font-sans selection:bg-indigo-600 selection:text-white pb-16 relative">
       <style jsx global>{`
@@ -662,10 +671,13 @@ export default function VashuExactMerchantDashboard() {
               🔄 Renew
             </button>
 
+            {/* Step 2 highlights PC Spooler button along with Agent Key Box */}
             <button
               id="tour-spooler-btn"
               onClick={handleDownloadSoftware}
-              className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all cursor-pointer whitespace-nowrap"
+              className={`px-2.5 py-1 rounded-md text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all cursor-pointer whitespace-nowrap ${
+                tourActive && tourStep === 2 ? 'marching-ants-border bg-indigo-900/60' : ''
+              }`}
             >
               ⬇ PC Spooler (.zip)
             </button>
@@ -980,7 +992,7 @@ export default function VashuExactMerchantDashboard() {
           </div>
         )}
 
-        {/* TAB 3: LIVE QUEUE */}
+        {/* TAB 3: LIVE QUEUE (Renamed Heading to Simple: Live Print Orders & History) */}
         {activeTab === 'queue' && (
           <div
             id="tour-incoming-stream"
@@ -989,7 +1001,7 @@ export default function VashuExactMerchantDashboard() {
             }`}
           >
             <div className="px-5 py-3.5 border-b border-slate-800/80 flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Incoming Spooler Stream</span>
+              <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Live Print Orders &amp; History</span>
               <span className="text-[10px] text-slate-500 font-mono">Real-time sync</span>
             </div>
             {orders.length === 0 ? (
@@ -1050,19 +1062,24 @@ export default function VashuExactMerchantDashboard() {
       </main>
 
       {/* ------------------------------------------------------------- */}
-      {/* 3. ATTACHED CONTEXTUAL MICRO-TOOLTIP (FLOATING BESIDE TARGET) */}
+      {/* 3. ATTACHED CONTEXTUAL MICRO-TOOLTIP (ACCURATE ARROW TARGET)  */}
       {/* ------------------------------------------------------------- */}
       {tourActive && anchorRect && (
         <div
           style={{
             position: 'absolute',
             top: `${anchorRect.top + anchorRect.height + 14}px`,
-            left: `${Math.max(12, Math.min(anchorRect.left + anchorRect.width / 2 - 160, typeof window !== 'undefined' ? window.innerWidth - 340 : anchorRect.left))}px`,
+            left: `${popupLeft}px`,
+            width: `${popupWidth}px`,
             zIndex: 9999,
           }}
-          className="w-80 sm:w-84 bg-[#0a0f1e] border-2 border-amber-400 rounded-2xl p-4 shadow-2xl shadow-amber-500/25 space-y-3 animate-in fade-in zoom-in-95 duration-150 no-print"
+          className="bg-[#0a0f1e] border-2 border-amber-400 rounded-2xl p-4 shadow-2xl shadow-amber-500/25 space-y-3 animate-in fade-in zoom-in-95 duration-150 no-print"
         >
-          <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 w-4 h-4 bg-[#0a0f1e] border-t-2 border-l-2 border-amber-400 rotate-45"></div>
+          {/* Dynamic arrow alignment directly pointing to target center */}
+          <div
+            style={{ left: `${arrowLeftOffset}px` }}
+            className="absolute -top-2.5 -translate-x-1/2 w-4 h-4 bg-[#0a0f1e] border-t-2 border-l-2 border-amber-400 rotate-45"
+          ></div>
 
           <div className="flex items-center justify-between border-b border-slate-800 pb-2">
             <span className="text-[10px] font-bold font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
@@ -1097,7 +1114,7 @@ export default function VashuExactMerchantDashboard() {
             </div>
           )}
 
-          {/* STEP 2: PC AGENT & KEY */}
+          {/* STEP 2: PC AGENT & KEY (Highlights both button and key box) */}
           {tourStep === 2 && (
             <div className="space-y-2">
               <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
@@ -1105,8 +1122,8 @@ export default function VashuExactMerchantDashboard() {
                 <span>Connect Your PC &amp; Printer</span>
               </h4>
               <p className="text-[11px] text-slate-300 leading-relaxed">
-                1. Click <strong>&apos;PC Spooler (.zip)&apos;</strong> in header to download the app.<br />
-                2. Extract the folder and paste this <strong>Agent Key</strong> once.<br />
+                1. Click the glowing <strong>&apos;PC Spooler (.zip)&apos;</strong> button in header to download the software.<br />
+                2. Extract the folder and paste this glowing <strong>Agent Key</strong> once.<br />
                 Your counter printer will connect silently.
               </p>
               <div className="pt-2 flex items-center justify-between">
@@ -1207,7 +1224,7 @@ export default function VashuExactMerchantDashboard() {
             </div>
           )}
 
-          {/* STEP 6: CLICK LIVE QUEUE TAB PROMPT */}
+          {/* STEP 6: CLICK LIVE QUEUE TAB PROMPT (Arrow points directly to Live Queue) */}
           {tourStep === 6 && (
             <div className="space-y-2">
               <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
@@ -1265,7 +1282,7 @@ export default function VashuExactMerchantDashboard() {
             <div className="space-y-2">
               <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
                 <span>⚡</span>
-                <span>Incoming Spooler Stream</span>
+                <span>Live Print Orders &amp; History</span>
               </h4>
               <p className="text-[11px] text-slate-300 leading-relaxed">
                 Paid customer prints will stream here in real-time. Your PC Spooler automatically prints the physical copies and shreds the file immediately!
