@@ -22,14 +22,28 @@ export default function VashuExactMerchantDashboard() {
 
   const [shop, setShop] = useState<any>(null);
   const [orders, setOrders] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'queue' | 'pricing' | 'standee'>('queue');
+  // Start on standee tab for intuitive counter setup
+  const [activeTab, setActiveTab] = useState<'standee' | 'pricing' | 'queue'>('standee');
   const [loading, setLoading] = useState(true);
   const [baseUrl, setBaseUrl] = useState('https://scantoprint.in');
 
-  // Interactive In-Place Spotlight Tour
+  // Welcome Screen & Tour States
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [tourActive, setTourActive] = useState(false);
   const [tourStep, setTourStep] = useState<number>(1);
   const [anchorRect, setAnchorRect] = useState<TourAnchorRect | null>(null);
+
+  // Ref to prevent background telemetry intervals from resetting current tour step
+  const tourStepRef = useRef(1);
+  const tourActiveRef = useRef(false);
+
+  useEffect(() => {
+    tourStepRef.current = tourStep;
+  }, [tourStep]);
+
+  useEffect(() => {
+    tourActiveRef.current = tourActive;
+  }, [tourActive]);
 
   const [pricing, setPricing] = useState({
     bwSingle: 2,
@@ -63,15 +77,16 @@ export default function VashuExactMerchantDashboard() {
       const name = shop.business_name || shop.name || 'Store';
       document.title = `${name} • Counter Dashboard | ScanToPrint`;
 
-      const tourFinished = localStorage.getItem(`stp_tour_done_${slug}`);
-      if (!tourFinished) {
-        setTourActive(true);
-        setTourStep(1);
+      // Check if welcome was already completed for this specific merchant
+      const welcomeDone = localStorage.getItem(`stp_welcome_done_${slug}`);
+      if (!welcomeDone) {
+        setShowWelcomeModal(true);
+        setActiveTab('standee');
       }
     }
   }, [shop, slug]);
 
-  // Position calculation for floating popups attached to target elements
+  // Position calculation for attached micro-tooltips
   const updateTargetAnchor = (elementId: string) => {
     if (typeof window === 'undefined') return;
     const elem = document.getElementById(elementId);
@@ -97,22 +112,22 @@ export default function VashuExactMerchantDashboard() {
       if (tourStep === 2) updateTargetAnchor('tour-agent-key-box');
       if (tourStep === 3) updateTargetAnchor('tour-pricing-tab');
       if (tourStep === 4) updateTargetAnchor('tour-subscription-box');
-    }, 150);
+    }, 120);
 
-    const handleResize = () => {
+    const handleScrollOrResize = () => {
       if (tourStep === 1) updateTargetAnchor('tour-standee-tab');
       if (tourStep === 2) updateTargetAnchor('tour-agent-key-box');
       if (tourStep === 3) updateTargetAnchor('tour-pricing-tab');
       if (tourStep === 4) updateTargetAnchor('tour-subscription-box');
     };
 
-    window.addEventListener('resize', handleResize);
-    window.addEventListener('scroll', handleResize);
+    window.addEventListener('resize', handleScrollOrResize);
+    window.addEventListener('scroll', handleScrollOrResize);
 
     return () => {
       clearTimeout(timer);
-      window.removeEventListener('resize', handleResize);
-      window.removeEventListener('scroll', handleResize);
+      window.removeEventListener('resize', handleScrollOrResize);
+      window.removeEventListener('scroll', handleScrollOrResize);
     };
   }, [tourActive, tourStep, activeTab]);
 
@@ -196,9 +211,10 @@ export default function VashuExactMerchantDashboard() {
       )
       .subscribe();
 
+    // Telemetry polling: will update orders quietly without resetting tour states
     const interval = setInterval(() => {
       fetchShopData(true);
-    }, 5000);
+    }, 6000);
 
     return () => {
       supabase.removeChannel(shopChannel);
@@ -316,10 +332,24 @@ export default function VashuExactMerchantDashboard() {
     }
   };
 
+  // Welcome Screen actions
+  const handleStartTourFromWelcome = () => {
+    setShowWelcomeModal(false);
+    localStorage.setItem(`stp_welcome_done_${slug}`, 'true');
+    setActiveTab('standee');
+    setTourStep(1);
+    setTourActive(true);
+  };
+
+  const handleSkipWelcome = () => {
+    setShowWelcomeModal(false);
+    setTourActive(false);
+    localStorage.setItem(`stp_welcome_done_${slug}`, 'true');
+  };
+
   const handleFinishTour = () => {
     setTourActive(false);
     localStorage.setItem(`stp_tour_done_${slug}`, 'true');
-    setActiveTab('queue');
   };
 
   if (loading) {
@@ -378,6 +408,7 @@ export default function VashuExactMerchantDashboard() {
   const pagesRemaining = Math.max(0, totalPageLimit - printedPagesCount);
 
   const shopTitle = shop.business_name || shop.name || 'Store';
+  const ownerName = shop.owner_name || 'Partner';
   const shopInitial = shopTitle.trim().charAt(0).toUpperCase() || 'S';
 
   const uploadPageUrl = `${baseUrl}/shop/${shop.slug}`;
@@ -414,33 +445,84 @@ export default function VashuExactMerchantDashboard() {
           #printable-standee { box-shadow: none !important; break-inside: avoid !important; page-break-inside: avoid !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; transform: scale(1.05); }
         }
 
-        /* Subtle 15% Dimming during Tour (Crystal Clear Visibility) */
-        .tour-dim-active {
-          opacity: 0.82 !important;
+        /* Subtle 15% dimming - background remains crystal clear */
+        .tour-dim-subtle {
+          opacity: 0.85 !important;
           transition: opacity 0.2s ease-in-out;
         }
 
         /* Animated Golden Border for Highlighted Elements */
         .tour-golden-highlight {
           position: relative !important;
-          z-index: 50 !important;
+          z-index: 45 !important;
           border-color: #f59e0b !important;
-          box-shadow: 0 0 0 2px #f59e0b, 0 0 20px rgba(245, 158, 11, 0.45) !important;
+          box-shadow: 0 0 0 2px #f59e0b, 0 0 22px rgba(245, 158, 11, 0.45) !important;
           animation: pulseGoldenBorder 1.5s infinite alternate ease-in-out !important;
         }
 
         @keyframes pulseGoldenBorder {
           from {
-            box-shadow: 0 0 0 2px #f59e0b, 0 0 12px rgba(245, 158, 11, 0.35);
+            box-shadow: 0 0 0 2px #f59e0b, 0 0 10px rgba(245, 158, 11, 0.35);
           }
           to {
-            box-shadow: 0 0 0 3px #fbbf24, 0 0 26px rgba(251, 191, 36, 0.75);
+            box-shadow: 0 0 0 3px #fbbf24, 0 0 24px rgba(251, 191, 36, 0.75);
           }
         }
       `}</style>
 
       {/* ------------------------------------------------------------- */}
-      {/* RESPONSIVE HEADER                                             */}
+      {/* 1. PERSONALIZED WELCOME MODAL ON FIRST LOGIN                  */}
+      {/* ------------------------------------------------------------- */}
+      {showWelcomeModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 no-print animate-in fade-in duration-200">
+          <div className="bg-[#0b1021] border-2 border-indigo-500/50 rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl space-y-5 relative">
+            <div className="w-14 h-14 rounded-2xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center text-2xl mx-auto">
+              👋
+            </div>
+
+            <div className="text-center space-y-2">
+              <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
+                Welcome to ScanToPrint
+              </span>
+              <h2 className="text-xl sm:text-2xl font-black text-white">
+                Hello, {ownerName}!
+              </h2>
+              <p className="text-sm font-semibold text-indigo-300">
+                {shopTitle} is now ready to automate counter printing.
+              </p>
+              <p className="text-xs text-slate-300 leading-relaxed pt-1">
+                We are thrilled to partner with you. If you ever need assistance with printer setup, rates, or payouts, our team is always ready to support your business.
+              </p>
+            </div>
+
+            <div className="bg-[#070b18] border border-slate-800 p-3.5 rounded-2xl text-[11px] text-slate-400 space-y-1">
+              <p className="font-bold text-white flex items-center gap-1.5">
+                <span>⚡</span>
+                <span>Quick 4-Step Interactive Tour</span>
+              </p>
+              <p>Take 1 minute to see where your standee, pricing rates, and live orders live.</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <button
+                onClick={handleSkipWelcome}
+                className="py-3 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-xs font-bold transition-all cursor-pointer text-center"
+              >
+                Skip to Dashboard
+              </button>
+              <button
+                onClick={handleStartTourFromWelcome}
+                className="py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-lg shadow-indigo-600/30 cursor-pointer text-center"
+              >
+                Explore Dashboard 🚀
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* 2. RESPONSIVE DASHBOARD HEADER                                */}
       {/* ------------------------------------------------------------- */}
       <header className="border-b border-slate-800/80 bg-[#090d1c]/95 sticky top-0 z-40 backdrop-blur-xl no-print">
         <div className="px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
@@ -470,6 +552,7 @@ export default function VashuExactMerchantDashboard() {
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => {
+                setActiveTab('standee');
                 setTourStep(1);
                 setTourActive(true);
               }}
@@ -543,16 +626,21 @@ export default function VashuExactMerchantDashboard() {
             </button>
           </div>
 
-          {/* Navigation Tabs */}
+          {/* Navigation Tabs (Clicking also auto-advances tour smoothly) */}
           <div className="flex items-center gap-1 bg-[#0b1021] p-0.5 rounded-lg border border-slate-800 shrink-0">
             <button
-              id="tour-queue-tab"
-              onClick={() => setActiveTab('queue')}
+              id="tour-standee-tab"
+              onClick={() => {
+                setActiveTab('standee');
+                if (tourActive && tourStep === 1) {
+                  setTourStep(2);
+                }
+              }}
               className={`px-3 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
-                activeTab === 'queue' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
-              }`}
+                activeTab === 'standee' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
+              } ${tourActive && tourStep === 1 ? 'tour-golden-highlight' : ''}`}
             >
-              Live Queue
+              Store Standee
             </button>
 
             <button
@@ -571,25 +659,22 @@ export default function VashuExactMerchantDashboard() {
             </button>
 
             <button
-              id="tour-standee-tab"
+              id="tour-queue-tab"
               onClick={() => {
-                setActiveTab('standee');
-                if (tourActive && tourStep === 1) {
-                  setTourStep(2);
-                }
+                setActiveTab('queue');
               }}
               className={`px-3 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
-                activeTab === 'standee' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
-              } ${tourActive && tourStep === 1 ? 'tour-golden-highlight' : ''}`}
+                activeTab === 'queue' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
+              }`}
             >
-              Store Standee
+              Live Queue
             </button>
           </div>
         </div>
       </header>
 
-      {/* Main Canvas with Subtle Dimming during tour */}
-      <main className={`max-w-6xl mx-auto px-4 sm:px-6 pt-5 space-y-5 transition-all ${tourActive ? 'tour-dim-active' : ''}`}>
+      {/* Main Canvas */}
+      <main className={`max-w-6xl mx-auto px-4 sm:px-6 pt-5 space-y-5 transition-all ${tourActive ? 'tour-dim-subtle' : ''}`}>
         
         {/* Metric Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 no-print">
@@ -692,66 +777,68 @@ export default function VashuExactMerchantDashboard() {
           <span className="text-[11px] text-slate-400">Enter this key once inside the Windows background spooler.</span>
         </div>
 
-        {/* TAB 1: LIVE QUEUE */}
-        {activeTab === 'queue' && (
-          <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl overflow-hidden shadow-xl no-print">
-            <div className="px-5 py-3.5 border-b border-slate-800/80 flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Incoming Spooler Stream</span>
-              <span className="text-[10px] text-slate-500 font-mono">Auto-refreshes every 5s</span>
+        {/* TAB 1: STORE STANDEE (Default Landing Tab for New Logins) */}
+        {activeTab === 'standee' && (
+          <div className="flex flex-col items-center justify-center pt-2 space-y-4">
+            <div id="printable-standee-container" className="w-full flex justify-center">
+              <div
+                id="printable-standee"
+                style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+                className="w-full max-w-[340px] rounded-[32px] overflow-hidden bg-gradient-to-b from-[#5c4efc] via-[#473beb] to-[#070b18] border border-indigo-500/30 p-1 shadow-2xl shadow-indigo-950/70 text-center"
+              >
+                <div className="pt-6 pb-4 px-4 space-y-2">
+                  <div className="w-12 h-12 mx-auto rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center font-black text-white text-xs tracking-wider border border-white/20">
+                    {shopInitial}
+                  </div>
+                  <div className="text-[9px] uppercase tracking-widest text-indigo-200/90 font-bold">
+                    SCANTOPRINT PARTNER STORE
+                  </div>
+                  <h3 className="text-xl font-extrabold text-white tracking-tight">{shopTitle}</h3>
+                  <p className="text-[10px] text-indigo-200/80">Direct Wireless Print Counter</p>
+                </div>
+
+                <div className="bg-white rounded-[24px] mx-3 p-5 shadow-inner space-y-3">
+                  <div className="inline-block px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-[10px] font-bold text-indigo-700 uppercase tracking-wide">
+                    📱 SCAN ME TO PRINT
+                  </div>
+
+                  <div className="flex justify-center p-1">
+                    <img
+                      src={qrImageSource}
+                      alt="Scan To Print QR Code"
+                      className="w-56 h-56 object-contain rounded-xl"
+                    />
+                  </div>
+
+                  <p className="text-[10px] text-slate-500 font-medium">
+                    Scan with Camera or Any UPI App
+                  </p>
+                </div>
+
+                <div className="py-4 px-3 space-y-1">
+                  <div className="text-[9px] uppercase tracking-wider text-slate-400 font-semibold">
+                    POWERED & SECURED BY
+                  </div>
+                  <div className="flex items-center justify-center gap-1.5 pt-0.5">
+                    <img
+                      src="/icon.svg"
+                      alt="ScanToPrint Logo"
+                      className="w-4 h-4 rounded object-contain"
+                    />
+                    <span className="text-sm font-bold text-white tracking-wider">scantoprint.in</span>
+                  </div>
+                  <div className="text-[10px] font-mono text-indigo-300/80">{displayPrintLink}</div>
+                </div>
+              </div>
             </div>
-            {orders.length === 0 ? (
-              <div className="p-12 text-center text-slate-500 text-xs sm:text-sm">
-                No orders in queue yet. New prints will automatically stream here.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wider text-[10px] bg-[#070b18]/60">
-                      <th className="p-3.5">File</th>
-                      <th className="p-3.5">Settings</th>
-                      <th className="p-3.5">Copies</th>
-                      <th className="p-3.5">Amount</th>
-                      <th className="p-3.5">Status</th>
-                      <th className="p-3.5 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60 font-sans">
-                    {orders.map((o) => (
-                      <tr key={o.id} className="hover:bg-slate-800/20 transition-colors">
-                        <td className="p-3.5 font-medium text-white max-w-[200px] truncate" title={o.file_name}>
-                          {o.file_name}
-                        </td>
-                        <td className="p-3.5 text-slate-400 font-mono">
-                          {o.print_type === 'color' ? 'Color' : 'BW'}
-                        </td>
-                        <td className="p-3.5 font-mono text-slate-300">{o.copies || 1}</td>
-                        <td className="p-3.5 font-mono text-emerald-400 font-bold">₹{o.amount}</td>
-                        <td className="p-3.5">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
-                            o.print_status === 'completed' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'
-                          }`}>
-                            {o.print_status || 'in_queue'}
-                          </span>
-                        </td>
-                        <td className="p-3.5 text-right">
-                          {o.print_status !== 'completed' ? (
-                            <button
-                              onClick={() => handleMarkDone(o.id)}
-                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[11px] font-medium transition-all cursor-pointer"
-                            >
-                              Mark Done
-                            </button>
-                          ) : (
-                            <span className="text-[11px] text-slate-500">Done</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+
+            <button
+              onClick={handlePrintPoster}
+              className="no-print px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-indigo-600/30 flex items-center gap-2 cursor-pointer"
+            >
+              <span>🖨️</span>
+              <span>PRINT STANDEE POSTER (CTRL + P)</span>
+            </button>
           </div>
         )}
 
@@ -821,86 +908,84 @@ export default function VashuExactMerchantDashboard() {
           </div>
         )}
 
-        {/* TAB 3: STORE STANDEE */}
-        {activeTab === 'standee' && (
-          <div className="flex flex-col items-center justify-center pt-2 space-y-4">
-            <div id="printable-standee-container" className="w-full flex justify-center">
-              <div
-                id="printable-standee"
-                style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
-                className="w-full max-w-[340px] rounded-[32px] overflow-hidden bg-gradient-to-b from-[#5c4efc] via-[#473beb] to-[#070b18] border border-indigo-500/30 p-1 shadow-2xl shadow-indigo-950/70 text-center"
-              >
-                <div className="pt-6 pb-4 px-4 space-y-2">
-                  <div className="w-12 h-12 mx-auto rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center font-black text-white text-xs tracking-wider border border-white/20">
-                    {shopInitial}
-                  </div>
-                  <div className="text-[9px] uppercase tracking-widest text-indigo-200/90 font-bold">
-                    SCANTOPRINT PARTNER STORE
-                  </div>
-                  <h3 className="text-xl font-extrabold text-white tracking-tight">{shopTitle}</h3>
-                  <p className="text-[10px] text-indigo-200/80">Direct Wireless Print Counter</p>
-                </div>
-
-                <div className="bg-white rounded-[24px] mx-3 p-5 shadow-inner space-y-3">
-                  <div className="inline-block px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-[10px] font-bold text-indigo-700 uppercase tracking-wide">
-                    📱 SCAN ME TO PRINT
-                  </div>
-
-                  <div className="flex justify-center p-1">
-                    <img
-                      src={qrImageSource}
-                      alt="Scan To Print QR Code"
-                      className="w-56 h-56 object-contain rounded-xl"
-                    />
-                  </div>
-
-                  <p className="text-[10px] text-slate-500 font-medium">
-                    Scan with Camera or Any UPI App
-                  </p>
-                </div>
-
-                <div className="py-4 px-3 space-y-1">
-                  <div className="text-[9px] uppercase tracking-wider text-slate-400 font-semibold">
-                    POWERED & SECURED BY
-                  </div>
-                  <div className="flex items-center justify-center gap-1.5 pt-0.5">
-                    <img
-                      src="/icon.svg"
-                      alt="ScanToPrint Logo"
-                      className="w-4 h-4 rounded object-contain"
-                    />
-                    <span className="text-sm font-bold text-white tracking-wider">scantoprint.in</span>
-                  </div>
-                  <div className="text-[10px] font-mono text-indigo-300/80">{displayPrintLink}</div>
-                </div>
-              </div>
+        {/* TAB 3: LIVE QUEUE */}
+        {activeTab === 'queue' && (
+          <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl overflow-hidden shadow-xl no-print">
+            <div className="px-5 py-3.5 border-b border-slate-800/80 flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Incoming Spooler Stream</span>
+              <span className="text-[10px] text-slate-500 font-mono">Auto-refreshes every 6s</span>
             </div>
-
-            <button
-              onClick={handlePrintPoster}
-              className="no-print px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-indigo-600/30 flex items-center gap-2 cursor-pointer"
-            >
-              <span>🖨️</span>
-              <span>PRINT STANDEE POSTER (CTRL + P)</span>
-            </button>
+            {orders.length === 0 ? (
+              <div className="p-12 text-center text-slate-500 text-xs sm:text-sm">
+                No orders in queue yet. New prints will automatically stream here.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wider text-[10px] bg-[#070b18]/60">
+                      <th className="p-3.5">File</th>
+                      <th className="p-3.5">Settings</th>
+                      <th className="p-3.5">Copies</th>
+                      <th className="p-3.5">Amount</th>
+                      <th className="p-3.5">Status</th>
+                      <th className="p-3.5 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 font-sans">
+                    {orders.map((o) => (
+                      <tr key={o.id} className="hover:bg-slate-800/20 transition-colors">
+                        <td className="p-3.5 font-medium text-white max-w-[200px] truncate" title={o.file_name}>
+                          {o.file_name}
+                        </td>
+                        <td className="p-3.5 text-slate-400 font-mono">
+                          {o.print_type === 'color' ? 'Color' : 'BW'}
+                        </td>
+                        <td className="p-3.5 font-mono text-slate-300">{o.copies || 1}</td>
+                        <td className="p-3.5 font-mono text-emerald-400 font-bold">₹{o.amount}</td>
+                        <td className="p-3.5">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
+                            o.print_status === 'completed' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'
+                          }`}>
+                            {o.print_status || 'in_queue'}
+                          </span>
+                        </td>
+                        <td className="p-3.5 text-right">
+                          {o.print_status !== 'completed' ? (
+                            <button
+                              onClick={() => handleMarkDone(o.id)}
+                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[11px] font-medium transition-all cursor-pointer"
+                            >
+                              Mark Done
+                            </button>
+                          ) : (
+                            <span className="text-[11px] text-slate-500">Done</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </main>
 
       {/* ------------------------------------------------------------- */}
-      {/* ATTACHED CONTEXTUAL MICRO-POPUP (FLOATS EXACTLY BELOW TARGET) */}
+      {/* 3. ATTACHED CONTEXTUAL MICRO-TOOLTIP (STABLE POSITIONING)     */}
       {/* ------------------------------------------------------------- */}
       {tourActive && anchorRect && (
         <div
           style={{
             position: 'absolute',
-            top: `${anchorRect.top + anchorRect.height + 12}px`,
+            top: `${anchorRect.top + anchorRect.height + 14}px`,
             left: `${Math.max(12, Math.min(anchorRect.left + anchorRect.width / 2 - 160, typeof window !== 'undefined' ? window.innerWidth - 340 : anchorRect.left))}px`,
             zIndex: 9999,
           }}
-          className="w-80 sm:w-84 bg-[#0a0f1e] border-2 border-amber-400 rounded-2xl p-4 shadow-2xl shadow-amber-500/20 space-y-3 animate-in fade-in zoom-in-95 duration-150 no-print"
+          className="w-80 sm:w-84 bg-[#0a0f1e] border-2 border-amber-400 rounded-2xl p-4 shadow-2xl shadow-amber-500/25 space-y-3 animate-in fade-in zoom-in-95 duration-150 no-print"
         >
-          {/* Arrow pointing up to target */}
+          {/* Arrow pointing directly up to target */}
           <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 w-4 h-4 bg-[#0a0f1e] border-t-2 border-l-2 border-amber-400 rotate-45"></div>
 
           <div className="flex items-center justify-between border-b border-slate-800 pb-2">
@@ -915,15 +1000,15 @@ export default function VashuExactMerchantDashboard() {
             </button>
           </div>
 
-          {/* STEP 1 */}
+          {/* STEP 1: STANDEE */}
           {tourStep === 1 && (
             <div className="space-y-2">
               <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
                 <span>🪧</span>
-                <span>Click Here: Print Store Standee</span>
+                <span>Print Your Store QR Standee</span>
               </h4>
               <p className="text-[11px] text-slate-300 leading-relaxed">
-                Click this button to see your store standee. Print and place this QR on your shop counter so customers can scan and print.
+                Click this button to see your store standee. Print and place this QR on your shop counter so customers can scan and upload files directly.
               </p>
               <div className="pt-2 flex items-center justify-between">
                 <span className="text-[10px] text-amber-400 font-bold animate-pulse">
@@ -942,7 +1027,7 @@ export default function VashuExactMerchantDashboard() {
             </div>
           )}
 
-          {/* STEP 2 */}
+          {/* STEP 2: PC & AGENT KEY */}
           {tourStep === 2 && (
             <div className="space-y-2">
               <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
@@ -950,13 +1035,16 @@ export default function VashuExactMerchantDashboard() {
                 <span>Connect Your PC &amp; Printer</span>
               </h4>
               <p className="text-[11px] text-slate-300 leading-relaxed">
-                1. Click <strong>&apos;PC Spooler (.zip)&apos;</strong> to download app on your counter PC.<br />
+                1. Click <strong>&apos;PC Spooler (.zip)&apos;</strong> in header to download the app.<br />
                 2. Run it and paste this Agent Key once.<br />
-                Your printer is now connected.
+                Your counter printer is now linked.
               </p>
               <div className="pt-2 flex items-center justify-between">
                 <button
-                  onClick={() => setTourStep(1)}
+                  onClick={() => {
+                    setActiveTab('standee');
+                    setTourStep(1);
+                  }}
                   className="text-xs text-slate-400 hover:text-white cursor-pointer"
                 >
                   ← Back
@@ -974,7 +1062,7 @@ export default function VashuExactMerchantDashboard() {
             </div>
           )}
 
-          {/* STEP 3 */}
+          {/* STEP 3: PRICING */}
           {tourStep === 3 && (
             <div className="space-y-2">
               <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
@@ -982,7 +1070,7 @@ export default function VashuExactMerchantDashboard() {
                 <span>Click Here: Set Your Print Prices</span>
               </h4>
               <p className="text-[11px] text-slate-300 leading-relaxed">
-                Click this button to set your rates. You can change prices for Black &amp; White and Color prints here. Click &apos;Save&apos; and your new rates will update everywhere instantly.
+                Click this button to set your rates. You can change prices for Black &amp; White and Color prints here. Click &apos;Save New Rates&apos; to update everywhere instantly.
               </p>
               <div className="pt-2 flex items-center justify-between">
                 <button
@@ -1004,7 +1092,7 @@ export default function VashuExactMerchantDashboard() {
             </div>
           )}
 
-          {/* STEP 4 */}
+          {/* STEP 4: SUBSCRIPTION & LIVE QUEUE */}
           {tourStep === 4 && (
             <div className="space-y-2">
               <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
@@ -1013,11 +1101,14 @@ export default function VashuExactMerchantDashboard() {
               </h4>
               <p className="text-[11px] text-slate-300 leading-relaxed">
                 • Check remaining validity days here. Click &apos;Top-Up&apos; for extra pages or &apos;Renew&apos; to extend days.<br />
-                • All customer prints will show here in Live Queue and print out automatically.
+                • All incoming customer prints stream under &apos;Live Queue&apos; and print out automatically!
               </p>
               <div className="pt-2 flex items-center justify-between">
                 <button
-                  onClick={() => setTourStep(3)}
+                  onClick={() => {
+                    setActiveTab('pricing');
+                    setTourStep(3);
+                  }}
                   className="text-xs text-slate-400 hover:text-white cursor-pointer"
                 >
                   ← Back
@@ -1026,7 +1117,7 @@ export default function VashuExactMerchantDashboard() {
                   onClick={handleFinishTour}
                   className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs rounded-xl shadow cursor-pointer"
                 >
-                  Done! Start Using 🚀
+                  Done! Start Printing 🚀
                 </button>
               </div>
             </div>
@@ -1035,7 +1126,7 @@ export default function VashuExactMerchantDashboard() {
       )}
 
       {/* ------------------------------------------------------------- */}
-      {/* TWO-MODE MODAL: 1. TOP-UP (PAGES ONLY) VS 2. RENEW PLAN (+28D) */}
+      {/* 4. TWO-MODE MODAL: TOP-UP (PAGES ONLY) VS RENEW PLAN (+28D)   */}
       {/* ------------------------------------------------------------- */}
       {isRenewModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto no-print">
