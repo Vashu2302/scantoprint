@@ -254,14 +254,12 @@ export default function ExactCustomerPrintStudio() {
       const validFiles: File[] = [];
 
       for (const f of selectedFiles) {
-        // 1. Check Max Size (25MB)
         if (f.size > MAX_FILE_SIZE_BYTES) {
           setUploadError(`"${f.name}" is larger than 25MB limit. Please upload a compressed document.`);
           if (fileInputRef.current) fileInputRef.current.value = '';
           return;
         }
 
-        // 2. Strict MIME-Type & Extension Check
         const ext = f.name.slice(((f.name.lastIndexOf('.') - 1) >>> 0) + 2).toLowerCase();
         const isMimeValid = ALLOWED_MIME_TYPES.includes(f.type);
         const isExtValid = ['pdf', 'png', 'jpg', 'jpeg', 'webp'].includes(ext);
@@ -538,7 +536,7 @@ export default function ExactCustomerPrintStudio() {
     return pdf.output('blob');
   };
 
-  // 1. Confirm & Move to Payment Screen
+  // 1. Confirm & Move to Payment Screen (SILENT: Does NOT alert the PC yet)
   const handleConfirmAndPay = async () => {
     if (!isShopOnline) {
       alert('Shop printer counter is offline. Please wait until connection is restored.');
@@ -572,13 +570,14 @@ export default function ExactCustomerPrintStudio() {
 
       const uploadedUrl = publicData?.publicUrl || '';
 
+      // Set to 'initiated' so PC agent ignores this until customer hits "I Have Paid"
       const orderPayload = {
         shop_id: shop.id,
         file_name: cleanFileName,
         pages: totalPreviewSheets,
         copies: copies,
         amount: totalCost,
-        payment_status: 'pending',
+        payment_status: 'initiated',
         print_status: 'draft_payment',
         print_type: colorMode,
         sided_type: sideMode,
@@ -615,7 +614,7 @@ export default function ExactCustomerPrintStudio() {
     }
   };
 
-  // 2. Customer clicks "I Have Paid"
+  // 2. Customer clicks "I Have Paid" (SIGNALS PC AGENT: Triggers Single Modal)
   const handleCustomerIHavePaid = async () => {
     if (!placedOrder) return;
     setIsWaitingShopApproval(true);
@@ -624,7 +623,7 @@ export default function ExactCustomerPrintStudio() {
       await supabase
         .from('orders')
         .update({
-          payment_status: 'awaiting_confirmation',
+          payment_status: 'pending_verification',
           print_status: 'waiting_approval',
         })
         .eq('id', placedOrder.id);
