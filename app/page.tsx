@@ -508,9 +508,9 @@ export default function HomePage() {
 
         <div className="space-y-4">
           <div className="p-5 rounded-2xl bg-[#0e1626]/70 border border-slate-800 space-y-2">
-            <h3 className="text-sm font-bold text-white">How does the Desktop Agent work?</h3>
+            <h3 className="text-sm font-bold text-white">How does the Desktop Agent connect to my store?</h3>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Shopkeepers download and run the background agent on their store PC. It connects securely to cloud storage, checks for newly paid documents, and prints them automatically.
+              Shopkeepers simply download the Spooler app and sign in with the <strong>same mobile number and password</strong> used for the shop dashboard. It links automatically without copying any secret keys, checks for newly paid documents, and prints them out silently.
             </p>
           </div>
 

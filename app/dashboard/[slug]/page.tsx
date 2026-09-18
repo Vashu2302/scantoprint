@@ -22,18 +22,15 @@ export default function VashuExactMerchantDashboard() {
 
   const [shop, setShop] = useState<any>(null);
   const [orders, setOrders] = useState<any[]>([]);
-  // Default start on Store Standee
   const [activeTab, setActiveTab] = useState<'standee' | 'pricing' | 'queue'>('standee');
   const [loading, setLoading] = useState(true);
   const [baseUrl, setBaseUrl] = useState('https://scantoprint.in');
 
-  // Welcome Screen & Sequential Guided Tour States
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [tourActive, setTourActive] = useState(false);
   const [tourStep, setTourStep] = useState<number>(1);
   const [anchorRect, setAnchorRect] = useState<TourAnchorRect | null>(null);
 
-  // Pricing State
   const [pricing, setPricing] = useState({
     bwSingle: 2,
     bwDouble: 3,
@@ -41,7 +38,6 @@ export default function VashuExactMerchantDashboard() {
     colorDouble: 18,
   });
 
-  // Security Auth Modal State (Required for changing UPI ID or Print Rates)
   const [securityModalOpen, setSecurityModalOpen] = useState(false);
   const [securityAction, setSecurityAction] = useState<'save_rates' | 'save_upi'>('save_rates');
   const [securityPassword, setSecurityPassword] = useState('');
@@ -49,11 +45,9 @@ export default function VashuExactMerchantDashboard() {
   const [savingSecuredData, setSavingSecuredData] = useState(false);
   const [ratesSaved, setRatesSaved] = useState(false);
 
-  // UPI Receiver Edit Modal State
   const [isEditUpiOpen, setIsEditUpiOpen] = useState(false);
   const [newUpiId, setNewUpiId] = useState('');
 
-  // Renewal / Top-Up Modal State
   const [isRenewModalOpen, setIsRenewModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'topup' | 'plan'>('topup');
   const [selectedTopup, setSelectedTopup] = useState<{ pages: number; price: number }>({ pages: 100, price: 50 });
@@ -84,7 +78,6 @@ export default function VashuExactMerchantDashboard() {
     }
   }, [shop, slug]);
 
-  // Smooth scroll & anchor target calculator for attached marching ants focus
   const scrollToAndFocus = (elementId: string) => {
     if (typeof window === 'undefined') return;
     const elem = document.getElementById(elementId);
@@ -102,7 +95,6 @@ export default function VashuExactMerchantDashboard() {
     }
   };
 
-  // Tour step listener & automatic smooth sliding
   useEffect(() => {
     if (!tourActive) {
       setAnchorRect(null);
@@ -111,7 +103,7 @@ export default function VashuExactMerchantDashboard() {
 
     const timer = setTimeout(() => {
       if (tourStep === 1) scrollToAndFocus('tour-printable-poster');
-      if (tourStep === 2) scrollToAndFocus('tour-agent-key-box');
+      if (tourStep === 2) scrollToAndFocus('tour-spooler-btn');
       if (tourStep === 3) scrollToAndFocus('tour-pricing-tab');
       if (tourStep === 4) scrollToAndFocus('tour-pricing-box');
       if (tourStep === 5) scrollToAndFocus('tour-subscription-box');
@@ -215,7 +207,6 @@ export default function VashuExactMerchantDashboard() {
     };
   }, [slug]);
 
-  // Request Rate Change (triggers Password Auth Modal)
   const handleRequestSaveRates = () => {
     setSecurityAction('save_rates');
     setSecurityPassword('');
@@ -223,20 +214,18 @@ export default function VashuExactMerchantDashboard() {
     setSecurityModalOpen(true);
   };
 
-  // Request UPI Change: closes edit modal and smoothly opens password verification
   const handleRequestSaveUpi = () => {
     if (!newUpiId.trim() || !newUpiId.includes('@')) {
       alert('Please enter a valid UPI ID (e.g. name@okhdfcbank or 9826xxxxxx@ybl).');
       return;
     }
-    setIsEditUpiOpen(false); // Seamlessly dismiss first modal
+    setIsEditUpiOpen(false);
     setSecurityAction('save_upi');
     setSecurityPassword('');
     setSecurityError('');
     setSecurityModalOpen(true);
   };
 
-  // Verify Store Password & Commit Sensitive Change
   const handleVerifyAndCommit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!shop) return;
@@ -370,7 +359,6 @@ export default function VashuExactMerchantDashboard() {
     }
   };
 
-  // Welcome Screen actions
   const handleStartTourFromWelcome = () => {
     setShowWelcomeModal(false);
     localStorage.setItem(`stp_welcome_done_${slug}`, 'true');
@@ -473,7 +461,6 @@ export default function VashuExactMerchantDashboard() {
   const renewDeepLink = `upi://pay?pa=${adminUpi}&pn=ScanToPrint%20Platform&am=${payableAmount}&cu=INR&tn=${encodeURIComponent(paymentNote)}`;
   const renewQrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(renewDeepLink)}`;
 
-  // Precise arrow alignment directly pointing to target element
   const popupWidth = typeof window !== 'undefined' && window.innerWidth < 640 ? 300 : 340;
   const popupLeft = anchorRect
     ? Math.max(12, Math.min(anchorRect.left + anchorRect.width / 2 - popupWidth / 2, typeof window !== 'undefined' ? window.innerWidth - popupWidth - 16 : anchorRect.left))
@@ -493,13 +480,11 @@ export default function VashuExactMerchantDashboard() {
           #printable-standee { box-shadow: none !important; break-inside: avoid !important; page-break-inside: avoid !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; transform: scale(1.05); }
         }
 
-        /* Subtle 12% Dimming during Tour - Real elements stay 100% visible */
         .tour-dim-subtle {
           opacity: 0.88 !important;
           transition: opacity 0.25s ease-in-out;
         }
 
-        /* MARCHING ANTS GOLDEN BORDER (Animated rotating dashed beam) */
         .marching-ants-border {
           position: relative !important;
           z-index: 50 !important;
@@ -524,9 +509,6 @@ export default function VashuExactMerchantDashboard() {
         }
       `}</style>
 
-      {/* ------------------------------------------------------------- */}
-      {/* 1. PERSONALIZED WELCOME MODAL ON FIRST LOGIN                  */}
-      {/* ------------------------------------------------------------- */}
       {showWelcomeModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 no-print animate-in fade-in duration-200">
           <div className="bg-[#0b1021] border-2 border-indigo-500/50 rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl space-y-5 relative">
@@ -554,7 +536,7 @@ export default function VashuExactMerchantDashboard() {
                 <span>⚡</span>
                 <span>Interactive Guided Walkthrough</span>
               </p>
-              <p>Explore your store standee, desktop agent key, pricing rates, and live orders step-by-step.</p>
+              <p>Explore your store standee, counter spooler, pricing rates, and live orders step-by-step.</p>
             </div>
 
             <div className="grid grid-cols-2 gap-3 pt-1">
@@ -575,9 +557,6 @@ export default function VashuExactMerchantDashboard() {
         </div>
       )}
 
-      {/* ------------------------------------------------------------- */}
-      {/* 2. RESPONSIVE DASHBOARD HEADER                                */}
-      {/* ------------------------------------------------------------- */}
       <header className="border-b border-slate-800/80 bg-[#090d1c]/95 sticky top-0 z-40 backdrop-blur-xl no-print">
         <div className="px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
@@ -626,7 +605,6 @@ export default function VashuExactMerchantDashboard() {
           </div>
         </div>
 
-        {/* Action & Nav Tab Row */}
         <div className="px-4 sm:px-6 py-2 border-t border-slate-800/60 bg-[#070b18]/60 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
           <div className="flex items-center gap-2 shrink-0">
             <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold border font-mono ${expiryColorClass}`}>
@@ -671,7 +649,6 @@ export default function VashuExactMerchantDashboard() {
               🔄 Renew
             </button>
 
-            {/* Step 2 highlights PC Spooler button along with Agent Key Box */}
             <button
               id="tour-spooler-btn"
               onClick={handleDownloadSoftware}
@@ -683,7 +660,6 @@ export default function VashuExactMerchantDashboard() {
             </button>
           </div>
 
-          {/* Navigation Tabs (Interactive click advances tour automatically) */}
           <div className="flex items-center gap-1 bg-[#0b1021] p-0.5 rounded-lg border border-slate-800 shrink-0">
             <button
               id="tour-standee-tab"
@@ -730,10 +706,8 @@ export default function VashuExactMerchantDashboard() {
         </div>
       </header>
 
-      {/* Main Content Area */}
       <main className={`max-w-6xl mx-auto px-4 sm:px-6 pt-5 space-y-5 transition-all ${tourActive ? 'tour-dim-subtle' : ''}`}>
         
-        {/* 4 Metric Cards with Secure UPI Edit Option */}
         <div
           id="tour-metrics-grid"
           className={`grid grid-cols-2 md:grid-cols-4 gap-3 no-print transition-all rounded-2xl p-1 ${
@@ -755,7 +729,6 @@ export default function VashuExactMerchantDashboard() {
             <div className="text-lg sm:text-xl font-bold font-mono text-amber-400 mt-1">{waitingInQueue}</div>
           </div>
 
-          {/* Secure Editable UPI Receiver Card */}
           <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-3.5 sm:p-4 flex flex-col justify-between">
             <div className="flex items-center justify-between">
               <span className="text-[10px] sm:text-[11px] text-slate-400 uppercase tracking-wider block font-medium">UPI Receiver</span>
@@ -775,7 +748,6 @@ export default function VashuExactMerchantDashboard() {
           </div>
         </div>
 
-        {/* Subscription & Quota Card (All-in-One Box) */}
         <div
           id="tour-subscription-box"
           className={`bg-gradient-to-r from-[#0b1021] via-[#0e1628] to-[#070b18] border rounded-2xl p-4 sm:p-5 shadow-xl flex flex-wrap items-center justify-between gap-4 no-print transition-all ${
@@ -838,23 +810,6 @@ export default function VashuExactMerchantDashboard() {
           </div>
         </div>
 
-        {/* Desktop Spooler Agent Key Box */}
-        <div
-          id="tour-agent-key-box"
-          className={`bg-[#0b1021] border rounded-xl p-3 sm:px-4 sm:py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs no-print transition-all ${
-            tourActive && tourStep === 2 ? 'marching-ants-border' : 'border-slate-800/90'
-          }`}
-        >
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="text-amber-400 font-bold shrink-0">⚡ Desktop Agent Key:</span>
-            <span className="font-mono text-white bg-slate-900/80 px-2 py-1 rounded border border-slate-800 select-all truncate">
-              {shop.api_key}
-            </span>
-          </div>
-          <span className="text-[11px] text-slate-400">Enter this key once inside the Windows background spooler.</span>
-        </div>
-
-        {/* TAB 1: STORE STANDEE */}
         {activeTab === 'standee' && (
           <div className="flex flex-col items-center justify-center pt-2 space-y-4">
             <div id="printable-standee-container" className="w-full flex justify-center">
@@ -921,7 +876,6 @@ export default function VashuExactMerchantDashboard() {
           </div>
         )}
 
-        {/* TAB 2: PRICING RATES */}
         {activeTab === 'pricing' && (
           <div
             id="tour-pricing-box"
@@ -992,7 +946,6 @@ export default function VashuExactMerchantDashboard() {
           </div>
         )}
 
-        {/* TAB 3: LIVE QUEUE (Renamed Heading to Simple: Live Print Orders & History) */}
         {activeTab === 'queue' && (
           <div
             id="tour-incoming-stream"
@@ -1061,9 +1014,6 @@ export default function VashuExactMerchantDashboard() {
         )}
       </main>
 
-      {/* ------------------------------------------------------------- */}
-      {/* 3. ATTACHED CONTEXTUAL MICRO-TOOLTIP (ACCURATE ARROW TARGET)  */}
-      {/* ------------------------------------------------------------- */}
       {tourActive && anchorRect && (
         <div
           style={{
@@ -1075,7 +1025,6 @@ export default function VashuExactMerchantDashboard() {
           }}
           className="bg-[#0a0f1e] border-2 border-amber-400 rounded-2xl p-4 shadow-2xl shadow-amber-500/25 space-y-3 animate-in fade-in zoom-in-95 duration-150 no-print"
         >
-          {/* Dynamic arrow alignment directly pointing to target center */}
           <div
             style={{ left: `${arrowLeftOffset}px` }}
             className="absolute -top-2.5 -translate-x-1/2 w-4 h-4 bg-[#0a0f1e] border-t-2 border-l-2 border-amber-400 rotate-45"
@@ -1093,7 +1042,6 @@ export default function VashuExactMerchantDashboard() {
             </button>
           </div>
 
-          {/* STEP 1: STANDEE POSTER */}
           {tourStep === 1 && (
             <div className="space-y-2">
               <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
@@ -1114,7 +1062,6 @@ export default function VashuExactMerchantDashboard() {
             </div>
           )}
 
-          {/* STEP 2: PC AGENT & KEY (Highlights both button and key box) */}
           {tourStep === 2 && (
             <div className="space-y-2">
               <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
@@ -1122,9 +1069,9 @@ export default function VashuExactMerchantDashboard() {
                 <span>Connect Your PC &amp; Printer</span>
               </h4>
               <p className="text-[11px] text-slate-300 leading-relaxed">
-                1. Click the glowing <strong>&apos;PC Spooler (.zip)&apos;</strong> button in header to download the software.<br />
-                2. Extract the folder and paste this glowing <strong>Agent Key</strong> once.<br />
-                Your counter printer will connect silently.
+                1. Click <strong>&apos;PC Spooler (.zip)&apos;</strong> button in header to download the software.<br />
+                2. Extract and login once with your store mobile number and password.<br />
+                Your counter printer will connect silently!
               </p>
               <div className="pt-2 flex items-center justify-between">
                 <button
@@ -1143,7 +1090,6 @@ export default function VashuExactMerchantDashboard() {
             </div>
           )}
 
-          {/* STEP 3: CLICK PRICING TAB PROMPT */}
           {tourStep === 3 && (
             <div className="space-y-2">
               <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
@@ -1167,7 +1113,6 @@ export default function VashuExactMerchantDashboard() {
             </div>
           )}
 
-          {/* STEP 4: PRICING TABLE DETAILS */}
           {tourStep === 4 && (
             <div className="space-y-2">
               <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
@@ -1197,7 +1142,6 @@ export default function VashuExactMerchantDashboard() {
             </div>
           )}
 
-          {/* STEP 5: SUBSCRIPTION BANNER */}
           {tourStep === 5 && (
             <div className="space-y-2">
               <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
@@ -1224,7 +1168,6 @@ export default function VashuExactMerchantDashboard() {
             </div>
           )}
 
-          {/* STEP 6: CLICK LIVE QUEUE TAB PROMPT (Arrow points directly to Live Queue) */}
           {tourStep === 6 && (
             <div className="space-y-2">
               <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
@@ -1248,7 +1191,6 @@ export default function VashuExactMerchantDashboard() {
             </div>
           )}
 
-          {/* STEP 7: COUNTER METRICS & RECEIVER UPI */}
           {tourStep === 7 && (
             <div className="space-y-2">
               <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
@@ -1277,7 +1219,6 @@ export default function VashuExactMerchantDashboard() {
             </div>
           )}
 
-          {/* STEP 8: INCOMING SPOOLER STREAM */}
           {tourStep === 8 && (
             <div className="space-y-2">
               <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
@@ -1307,9 +1248,6 @@ export default function VashuExactMerchantDashboard() {
         </div>
       )}
 
-      {/* ------------------------------------------------------------- */}
-      {/* 4. SECURITY PASSWORD VERIFICATION MODAL                       */}
-      {/* ------------------------------------------------------------- */}
       {securityModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 no-print animate-in fade-in duration-150">
           <form onSubmit={handleVerifyAndCommit} className="bg-[#0b1021] border-2 border-indigo-500/60 rounded-3xl p-6 sm:p-7 max-w-sm w-full shadow-2xl space-y-4 relative">
@@ -1368,9 +1306,6 @@ export default function VashuExactMerchantDashboard() {
         </div>
       )}
 
-      {/* ------------------------------------------------------------- */}
-      {/* 5. EDIT UPI RECEIVER MODAL                                    */}
-      {/* ------------------------------------------------------------- */}
       {isEditUpiOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 no-print animate-in fade-in duration-150">
           <div className="bg-[#0b1021] border border-indigo-500/40 rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4 relative">
@@ -1414,9 +1349,6 @@ export default function VashuExactMerchantDashboard() {
         </div>
       )}
 
-      {/* ------------------------------------------------------------- */}
-      {/* 6. TWO-MODE MODAL: TOP-UP (PAGES ONLY) VS RENEW PLAN (+28D)   */}
-      {/* ------------------------------------------------------------- */}
       {isRenewModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto no-print">
           <div className="bg-[#0b1021] border border-indigo-500/40 rounded-3xl p-5 sm:p-8 max-w-lg w-full shadow-2xl space-y-4 relative animate-in fade-in zoom-in-95 duration-150">
@@ -1472,7 +1404,6 @@ export default function VashuExactMerchantDashboard() {
               </div>
             </div>
 
-            {/* Mode 1: Quota Top-Up */}
             {modalMode === 'topup' && (
               <div className="grid grid-cols-3 gap-2 pt-1">
                 <div
@@ -1516,7 +1447,6 @@ export default function VashuExactMerchantDashboard() {
               </div>
             )}
 
-            {/* Mode 2: Buy / Renew Plan */}
             {modalMode === 'plan' && (
               <div className="grid grid-cols-2 gap-3 pt-1">
                 <div
@@ -1547,7 +1477,6 @@ export default function VashuExactMerchantDashboard() {
               </div>
             )}
 
-            {/* Clean QR & Payment */}
             <div className="bg-[#070b18] border border-slate-800 rounded-2xl p-3.5 text-center space-y-2.5">
               <div className="bg-white p-2 rounded-xl inline-block mx-auto shadow">
                 <img
