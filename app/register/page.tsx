@@ -112,10 +112,18 @@ function RegisterMerchantForm() {
 
       setAppliedCode(partner.referral_code);
       setPartnerDiscount(true);
-      setPromoMessage({
-        type: 'success',
-        text: `🎉 Code ${partner.referral_code} Applied! 20% Special Discount unlocked.`
-      });
+
+      if (activePlan === 'trial') {
+        setPromoMessage({
+          type: 'success',
+          text: `🎉 Code ${partner.referral_code} Linked! Partner tagged & 20% discount unlocked on your first recharge after trial.`
+        });
+      } else {
+        setPromoMessage({
+          type: 'success',
+          text: `🎉 Code ${partner.referral_code} Applied! 20% Special Discount unlocked.`
+        });
+      }
     } catch (err: any) {
       setPromoMessage({ type: 'error', text: 'Error verifying code.' });
     } finally {
@@ -298,7 +306,6 @@ function RegisterMerchantForm() {
                 Select Subscription Plan
               </span>
               <div className="relative bg-[#070b18] p-1 rounded-2xl border border-slate-800 flex items-center">
-                {/* Smooth Animated Sliding Indicator */}
                 <div
                   className={`absolute top-1 bottom-1 w-[32%] rounded-xl transition-all duration-300 ease-out shadow-lg ${
                     activePlan === 'trial'
@@ -603,52 +610,57 @@ function RegisterMerchantForm() {
                   </div>
                 </div>
 
-                {/* Referral Code Field */}
-                {!isTrial && (
-                  <div className="bg-[#070b18] border border-slate-800 p-3.5 rounded-2xl space-y-2">
+                {/* Referral Code Field - ALWAYS VISIBLE IN ALL PLANS (INCLUDING TRIAL) */}
+                <div className="bg-[#070b18] border border-slate-800 p-3.5 rounded-2xl space-y-2">
+                  <div className="flex items-center justify-between">
                     <label className="block text-[11px] font-bold uppercase tracking-wider text-indigo-300">
-                      Referral Code (Optional)
+                      Referral / Partner Code (Optional)
                     </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        disabled={partnerDiscount}
-                        placeholder="Enter referral code"
-                        value={referralInput}
-                        onChange={(e) => setReferralInput(e.target.value.toUpperCase())}
-                        className="flex-1 bg-[#0b1021] border border-slate-700 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs text-white font-mono uppercase placeholder-slate-600 focus:outline-none disabled:opacity-50"
-                      />
-                      {partnerDiscount ? (
-                        <button
-                          type="button"
-                          onClick={handleRemoveCode}
-                          className="px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 font-bold text-xs rounded-xl transition-all cursor-pointer"
-                        >
-                          Remove
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          disabled={checkingCode || !referralInput.trim()}
-                          onClick={handleApplyReferral}
-                          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md cursor-pointer"
-                        >
-                          {checkingCode ? 'Checking...' : 'Apply Code'}
-                        </button>
-                      )}
-                    </div>
-
-                    {promoMessage && (
-                      <p
-                        className={`text-[11px] ${
-                          promoMessage.type === 'success' ? 'text-emerald-400 font-medium' : 'text-rose-400'
-                        }`}
-                      >
-                        {promoMessage.text}
-                      </p>
+                    {isTrial && (
+                      <span className="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                        Applies after trial
+                      </span>
                     )}
                   </div>
-                )}
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      disabled={partnerDiscount}
+                      placeholder="Enter partner code (e.g. CAMPUS100)"
+                      value={referralInput}
+                      onChange={(e) => setReferralInput(e.target.value.toUpperCase())}
+                      className="flex-1 bg-[#0b1021] border border-slate-700 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs text-white font-mono uppercase placeholder-slate-600 focus:outline-none disabled:opacity-50"
+                    />
+                    {partnerDiscount ? (
+                      <button
+                        type="button"
+                        onClick={handleRemoveCode}
+                        className="px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 font-bold text-xs rounded-xl transition-all cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={checkingCode || !referralInput.trim()}
+                        onClick={handleApplyReferral}
+                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md cursor-pointer"
+                      >
+                        {checkingCode ? 'Checking...' : 'Apply Code'}
+                      </button>
+                    )}
+                  </div>
+
+                  {promoMessage && (
+                    <p
+                      className={`text-[11px] ${
+                        promoMessage.type === 'success' ? 'text-emerald-400 font-medium' : 'text-rose-400'
+                      }`}
+                    >
+                      {promoMessage.text}
+                    </p>
+                  )}
+                </div>
 
                 <div className="pt-2">
                   <button
