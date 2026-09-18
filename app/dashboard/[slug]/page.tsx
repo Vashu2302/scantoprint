@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 
@@ -22,37 +22,36 @@ export default function VashuExactMerchantDashboard() {
 
   const [shop, setShop] = useState<any>(null);
   const [orders, setOrders] = useState<any[]>([]);
-  // Start on standee tab for intuitive counter setup
+  // Default start on Store Standee
   const [activeTab, setActiveTab] = useState<'standee' | 'pricing' | 'queue'>('standee');
   const [loading, setLoading] = useState(true);
   const [baseUrl, setBaseUrl] = useState('https://scantoprint.in');
 
-  // Welcome Screen & Tour States
+  // Welcome Screen & Sequential Guided Tour States
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [tourActive, setTourActive] = useState(false);
   const [tourStep, setTourStep] = useState<number>(1);
   const [anchorRect, setAnchorRect] = useState<TourAnchorRect | null>(null);
 
-  // Ref to prevent background telemetry intervals from resetting current tour step
-  const tourStepRef = useRef(1);
-  const tourActiveRef = useRef(false);
-
-  useEffect(() => {
-    tourStepRef.current = tourStep;
-  }, [tourStep]);
-
-  useEffect(() => {
-    tourActiveRef.current = tourActive;
-  }, [tourActive]);
-
+  // Pricing State
   const [pricing, setPricing] = useState({
     bwSingle: 2,
     bwDouble: 3,
     colorSingle: 10,
     colorDouble: 18,
   });
-  const [savingRates, setSavingRates] = useState(false);
+
+  // Security Auth Modal State (Required for changing UPI ID or Print Rates)
+  const [securityModalOpen, setSecurityModalOpen] = useState(false);
+  const [securityAction, setSecurityAction] = useState<'save_rates' | 'save_upi'>('save_rates');
+  const [securityPassword, setSecurityPassword] = useState('');
+  const [securityError, setSecurityError] = useState('');
+  const [savingSecuredData, setSavingSecuredData] = useState(false);
   const [ratesSaved, setRatesSaved] = useState(false);
+
+  // UPI Receiver Edit Modal State
+  const [isEditUpiOpen, setIsEditUpiOpen] = useState(false);
+  const [newUpiId, setNewUpiId] = useState('');
 
   // Renewal / Top-Up Modal State
   const [isRenewModalOpen, setIsRenewModalOpen] = useState(false);
@@ -77,7 +76,6 @@ export default function VashuExactMerchantDashboard() {
       const name = shop.business_name || shop.name || 'Store';
       document.title = `${name} • Counter Dashboard | ScanToPrint`;
 
-      // Check if welcome was already completed for this specific merchant
       const welcomeDone = localStorage.getItem(`stp_welcome_done_${slug}`);
       if (!welcomeDone) {
         setShowWelcomeModal(true);
@@ -86,21 +84,25 @@ export default function VashuExactMerchantDashboard() {
     }
   }, [shop, slug]);
 
-  // Position calculation for attached micro-tooltips
-  const updateTargetAnchor = (elementId: string) => {
+  // Smooth scroll & anchor target calculator for attached marching ants focus
+  const scrollToAndFocus = (elementId: string) => {
     if (typeof window === 'undefined') return;
     const elem = document.getElementById(elementId);
     if (elem) {
-      const rect = elem.getBoundingClientRect();
-      setAnchorRect({
-        top: rect.top + window.scrollY,
-        left: rect.left + window.scrollX,
-        width: rect.width,
-        height: rect.height,
-      });
+      elem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(() => {
+        const rect = elem.getBoundingClientRect();
+        setAnchorRect({
+          top: rect.top + window.scrollY,
+          left: rect.left + window.scrollX,
+          width: rect.width,
+          height: rect.height,
+        });
+      }, 350);
     }
   };
 
+  // Tour step listener & automatic smooth sliding
   useEffect(() => {
     if (!tourActive) {
       setAnchorRect(null);
@@ -108,27 +110,17 @@ export default function VashuExactMerchantDashboard() {
     }
 
     const timer = setTimeout(() => {
-      if (tourStep === 1) updateTargetAnchor('tour-standee-tab');
-      if (tourStep === 2) updateTargetAnchor('tour-agent-key-box');
-      if (tourStep === 3) updateTargetAnchor('tour-pricing-tab');
-      if (tourStep === 4) updateTargetAnchor('tour-subscription-box');
-    }, 120);
+      if (tourStep === 1) scrollToAndFocus('tour-printable-poster');
+      if (tourStep === 2) scrollToAndFocus('tour-agent-key-box');
+      if (tourStep === 3) scrollToAndFocus('tour-pricing-tab');
+      if (tourStep === 4) scrollToAndFocus('tour-pricing-box');
+      if (tourStep === 5) scrollToAndFocus('tour-subscription-box');
+      if (tourStep === 6) scrollToAndFocus('tour-queue-tab');
+      if (tourStep === 7) scrollToAndFocus('tour-metrics-grid');
+      if (tourStep === 8) scrollToAndFocus('tour-incoming-stream');
+    }, 180);
 
-    const handleScrollOrResize = () => {
-      if (tourStep === 1) updateTargetAnchor('tour-standee-tab');
-      if (tourStep === 2) updateTargetAnchor('tour-agent-key-box');
-      if (tourStep === 3) updateTargetAnchor('tour-pricing-tab');
-      if (tourStep === 4) updateTargetAnchor('tour-subscription-box');
-    };
-
-    window.addEventListener('resize', handleScrollOrResize);
-    window.addEventListener('scroll', handleScrollOrResize);
-
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener('resize', handleScrollOrResize);
-      window.removeEventListener('scroll', handleScrollOrResize);
-    };
+    return () => clearTimeout(timer);
   }, [tourActive, tourStep, activeTab]);
 
   useEffect(() => {
@@ -161,6 +153,7 @@ export default function VashuExactMerchantDashboard() {
 
       if (shopData) {
         setShop(shopData);
+        setNewUpiId(shopData.upi_id || '');
         setPricing({
           bwSingle: Number(shopData.bw_single ?? 2),
           bwDouble: Number(shopData.bw_double ?? 3),
@@ -211,7 +204,6 @@ export default function VashuExactMerchantDashboard() {
       )
       .subscribe();
 
-    // Telemetry polling: will update orders quietly without resetting tour states
     const interval = setInterval(() => {
       fetchShopData(true);
     }, 6000);
@@ -223,27 +215,73 @@ export default function VashuExactMerchantDashboard() {
     };
   }, [slug]);
 
-  const handleSaveRates = async () => {
+  // Request Rate Change (triggers Password Auth Modal)
+  const handleRequestSaveRates = () => {
+    setSecurityAction('save_rates');
+    setSecurityPassword('');
+    setSecurityError('');
+    setSecurityModalOpen(true);
+  };
+
+  // Request UPI Change (triggers Password Auth Modal)
+  const handleRequestSaveUpi = () => {
+    if (!newUpiId.trim() || !newUpiId.includes('@')) {
+      alert('Please enter a valid UPI ID (e.g. name@okhdfcbank or 9826xxxxxx@ybl).');
+      return;
+    }
+    setSecurityAction('save_upi');
+    setSecurityPassword('');
+    setSecurityError('');
+    setSecurityModalOpen(true);
+  };
+
+  // Verify Store Password & Commit Sensitive Change
+  const handleVerifyAndCommit = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!shop) return;
-    setSavingRates(true);
-    setRatesSaved(false);
 
-    const { error } = await supabase
-      .from('shops')
-      .update({
-        bw_single: pricing.bwSingle,
-        bw_double: pricing.bwDouble,
-        color_single: pricing.colorSingle,
-        color_double: pricing.colorDouble,
-      })
-      .eq('id', shop.id);
+    if (securityPassword.trim() !== String(shop.plain_password).trim()) {
+      setSecurityError('Incorrect store password! Security check failed.');
+      return;
+    }
 
-    setSavingRates(false);
-    if (!error) {
-      setRatesSaved(true);
-      setTimeout(() => setRatesSaved(false), 3000);
-    } else {
-      alert('Error updating rates: ' + error.message);
+    setSavingSecuredData(true);
+    setSecurityError('');
+
+    try {
+      if (securityAction === 'save_rates') {
+        const { error } = await supabase
+          .from('shops')
+          .update({
+            bw_single: pricing.bwSingle,
+            bw_double: pricing.bwDouble,
+            color_single: pricing.colorSingle,
+            color_double: pricing.colorDouble,
+          })
+          .eq('id', shop.id);
+
+        if (error) throw error;
+        setRatesSaved(true);
+        setTimeout(() => setRatesSaved(false), 3000);
+      } else if (securityAction === 'save_upi') {
+        const { error } = await supabase
+          .from('shops')
+          .update({
+            upi_id: newUpiId.trim(),
+          })
+          .eq('id', shop.id);
+
+        if (error) throw error;
+        setShop({ ...shop, upi_id: newUpiId.trim() });
+        setIsEditUpiOpen(false);
+      }
+
+      setSecurityModalOpen(false);
+      setSecurityPassword('');
+    } catch (err: any) {
+      setSecurityError('Failed to update: ' + err.message);
+    } finally {
+      setSavingSecuredData(false);
     }
   };
 
@@ -350,6 +388,7 @@ export default function VashuExactMerchantDashboard() {
   const handleFinishTour = () => {
     setTourActive(false);
     localStorage.setItem(`stp_tour_done_${slug}`, 'true');
+    setActiveTab('queue');
   };
 
   if (loading) {
@@ -445,27 +484,33 @@ export default function VashuExactMerchantDashboard() {
           #printable-standee { box-shadow: none !important; break-inside: avoid !important; page-break-inside: avoid !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; transform: scale(1.05); }
         }
 
-        /* Subtle 15% dimming - background remains crystal clear */
+        /* Subtle 12% Dimming during Tour - Real elements stay 100% visible */
         .tour-dim-subtle {
-          opacity: 0.85 !important;
-          transition: opacity 0.2s ease-in-out;
+          opacity: 0.88 !important;
+          transition: opacity 0.25s ease-in-out;
         }
 
-        /* Animated Golden Border for Highlighted Elements */
-        .tour-golden-highlight {
+        /* MARCHING ANTS GOLDEN BORDER (Animated rotating dashed beam) */
+        .marching-ants-border {
           position: relative !important;
-          z-index: 45 !important;
-          border-color: #f59e0b !important;
-          box-shadow: 0 0 0 2px #f59e0b, 0 0 22px rgba(245, 158, 11, 0.45) !important;
-          animation: pulseGoldenBorder 1.5s infinite alternate ease-in-out !important;
+          z-index: 50 !important;
+          border: 2px dashed #f59e0b !important;
+          box-shadow: 0 0 25px rgba(245, 158, 11, 0.45), inset 0 0 15px rgba(245, 158, 11, 0.2) !important;
+          animation: marchingAnts 1.2s linear infinite !important;
         }
 
-        @keyframes pulseGoldenBorder {
-          from {
-            box-shadow: 0 0 0 2px #f59e0b, 0 0 10px rgba(245, 158, 11, 0.35);
+        @keyframes marchingAnts {
+          0% {
+            border-color: #f59e0b;
+            box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
           }
-          to {
-            box-shadow: 0 0 0 3px #fbbf24, 0 0 24px rgba(251, 191, 36, 0.75);
+          50% {
+            border-color: #fbbf24;
+            box-shadow: 0 0 28px rgba(251, 191, 36, 0.7);
+          }
+          100% {
+            border-color: #f59e0b;
+            box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
           }
         }
       `}</style>
@@ -488,19 +533,19 @@ export default function VashuExactMerchantDashboard() {
                 Hello, {ownerName}!
               </h2>
               <p className="text-sm font-semibold text-indigo-300">
-                {shopTitle} is now ready to automate counter printing.
+                {shopTitle} is now live and ready to automate document printing.
               </p>
               <p className="text-xs text-slate-300 leading-relaxed pt-1">
-                We are thrilled to partner with you. If you ever need assistance with printer setup, rates, or payouts, our team is always ready to support your business.
+                We are excited to have you on board! If you ever need help with USB printer setup, pricing, or payouts, our team is always here to support your business.
               </p>
             </div>
 
             <div className="bg-[#070b18] border border-slate-800 p-3.5 rounded-2xl text-[11px] text-slate-400 space-y-1">
               <p className="font-bold text-white flex items-center gap-1.5">
                 <span>⚡</span>
-                <span>Quick 4-Step Interactive Tour</span>
+                <span>Interactive Guided Walkthrough</span>
               </p>
-              <p>Take 1 minute to see where your standee, pricing rates, and live orders live.</p>
+              <p>Explore your store standee, desktop agent key, pricing rates, and live orders step-by-step.</p>
             </div>
 
             <div className="grid grid-cols-2 gap-3 pt-1">
@@ -508,7 +553,7 @@ export default function VashuExactMerchantDashboard() {
                 onClick={handleSkipWelcome}
                 className="py-3 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-xs font-bold transition-all cursor-pointer text-center"
               >
-                Skip to Dashboard
+                Skip to Counter
               </button>
               <button
                 onClick={handleStartTourFromWelcome}
@@ -572,7 +617,7 @@ export default function VashuExactMerchantDashboard() {
           </div>
         </div>
 
-        {/* Action Row */}
+        {/* Action & Nav Tab Row */}
         <div className="px-4 sm:px-6 py-2 border-t border-slate-800/60 bg-[#070b18]/60 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
           <div className="flex items-center gap-2 shrink-0">
             <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold border font-mono ${expiryColorClass}`}>
@@ -626,19 +671,16 @@ export default function VashuExactMerchantDashboard() {
             </button>
           </div>
 
-          {/* Navigation Tabs (Clicking also auto-advances tour smoothly) */}
+          {/* Navigation Tabs (Interactive click advances tour automatically) */}
           <div className="flex items-center gap-1 bg-[#0b1021] p-0.5 rounded-lg border border-slate-800 shrink-0">
             <button
               id="tour-standee-tab"
               onClick={() => {
                 setActiveTab('standee');
-                if (tourActive && tourStep === 1) {
-                  setTourStep(2);
-                }
               }}
               className={`px-3 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
                 activeTab === 'standee' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
-              } ${tourActive && tourStep === 1 ? 'tour-golden-highlight' : ''}`}
+              }`}
             >
               Store Standee
             </button>
@@ -653,7 +695,7 @@ export default function VashuExactMerchantDashboard() {
               }}
               className={`px-3 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
                 activeTab === 'pricing' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
-              } ${tourActive && tourStep === 3 ? 'tour-golden-highlight' : ''}`}
+              } ${tourActive && tourStep === 3 ? 'marching-ants-border' : ''}`}
             >
               Pricing Rates
             </button>
@@ -662,10 +704,13 @@ export default function VashuExactMerchantDashboard() {
               id="tour-queue-tab"
               onClick={() => {
                 setActiveTab('queue');
+                if (tourActive && tourStep === 6) {
+                  setTourStep(7);
+                }
               }}
               className={`px-3 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
                 activeTab === 'queue' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
-              }`}
+              } ${tourActive && tourStep === 6 ? 'marching-ants-border' : ''}`}
             >
               Live Queue
             </button>
@@ -673,26 +718,46 @@ export default function VashuExactMerchantDashboard() {
         </div>
       </header>
 
-      {/* Main Canvas */}
+      {/* Main Content Area */}
       <main className={`max-w-6xl mx-auto px-4 sm:px-6 pt-5 space-y-5 transition-all ${tourActive ? 'tour-dim-subtle' : ''}`}>
         
-        {/* Metric Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 no-print">
+        {/* 4 Metric Cards with Secure UPI Edit Option */}
+        <div
+          id="tour-metrics-grid"
+          className={`grid grid-cols-2 md:grid-cols-4 gap-3 no-print transition-all rounded-2xl p-1 ${
+            tourActive && tourStep === 7 ? 'marching-ants-border' : ''
+          }`}
+        >
           <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-3.5 sm:p-4">
             <span className="text-[10px] sm:text-[11px] text-slate-400 uppercase tracking-wider block font-medium">Today&apos;s Revenue</span>
             <div className="text-lg sm:text-xl font-bold font-mono text-emerald-400 mt-1">₹{todayRevenue.toFixed(2)}</div>
           </div>
+
           <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-3.5 sm:p-4">
             <span className="text-[10px] sm:text-[11px] text-slate-400 uppercase tracking-wider block font-medium">Total Jobs</span>
             <div className="text-lg sm:text-xl font-bold font-mono text-white mt-1">{orders.length}</div>
           </div>
+
           <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-3.5 sm:p-4">
             <span className="text-[10px] sm:text-[11px] text-slate-400 uppercase tracking-wider block font-medium">Waiting in Queue</span>
             <div className="text-lg sm:text-xl font-bold font-mono text-amber-400 mt-1">{waitingInQueue}</div>
           </div>
-          <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-3.5 sm:p-4">
-            <span className="text-[10px] sm:text-[11px] text-slate-400 uppercase tracking-wider block font-medium">UPI Receiver</span>
-            <div className="text-xs font-mono text-indigo-300 truncate mt-1.5 font-medium" title={shop.upi_id}>
+
+          {/* Secure Editable UPI Receiver Card */}
+          <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-3.5 sm:p-4 flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] sm:text-[11px] text-slate-400 uppercase tracking-wider block font-medium">UPI Receiver</span>
+              <button
+                onClick={() => {
+                  setNewUpiId(shop.upi_id || '');
+                  setIsEditUpiOpen(true);
+                }}
+                className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold underline cursor-pointer"
+              >
+                Change ✏️
+              </button>
+            </div>
+            <div className="text-xs font-mono text-indigo-300 truncate mt-1.5 font-bold" title={shop.upi_id}>
               {shop.upi_id || 'Not Configured'}
             </div>
           </div>
@@ -702,7 +767,7 @@ export default function VashuExactMerchantDashboard() {
         <div
           id="tour-subscription-box"
           className={`bg-gradient-to-r from-[#0b1021] via-[#0e1628] to-[#070b18] border rounded-2xl p-4 sm:p-5 shadow-xl flex flex-wrap items-center justify-between gap-4 no-print transition-all ${
-            tourActive && tourStep === 4 ? 'tour-golden-highlight' : 'border-indigo-500/30'
+            tourActive && tourStep === 5 ? 'marching-ants-border' : 'border-indigo-500/30'
           }`}
         >
           <div className="flex items-center gap-3.5">
@@ -765,7 +830,7 @@ export default function VashuExactMerchantDashboard() {
         <div
           id="tour-agent-key-box"
           className={`bg-[#0b1021] border rounded-xl p-3 sm:px-4 sm:py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs no-print transition-all ${
-            tourActive && tourStep === 2 ? 'tour-golden-highlight' : 'border-slate-800/90'
+            tourActive && tourStep === 2 ? 'marching-ants-border' : 'border-slate-800/90'
           }`}
         >
           <div className="flex items-center gap-2 min-w-0">
@@ -777,14 +842,16 @@ export default function VashuExactMerchantDashboard() {
           <span className="text-[11px] text-slate-400">Enter this key once inside the Windows background spooler.</span>
         </div>
 
-        {/* TAB 1: STORE STANDEE (Default Landing Tab for New Logins) */}
+        {/* TAB 1: STORE STANDEE */}
         {activeTab === 'standee' && (
           <div className="flex flex-col items-center justify-center pt-2 space-y-4">
             <div id="printable-standee-container" className="w-full flex justify-center">
               <div
-                id="printable-standee"
+                id="tour-printable-poster"
                 style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
-                className="w-full max-w-[340px] rounded-[32px] overflow-hidden bg-gradient-to-b from-[#5c4efc] via-[#473beb] to-[#070b18] border border-indigo-500/30 p-1 shadow-2xl shadow-indigo-950/70 text-center"
+                className={`w-full max-w-[340px] rounded-[32px] overflow-hidden bg-gradient-to-b from-[#5c4efc] via-[#473beb] to-[#070b18] border p-1 shadow-2xl shadow-indigo-950/70 text-center transition-all ${
+                  tourActive && tourStep === 1 ? 'marching-ants-border' : 'border-indigo-500/30'
+                }`}
               >
                 <div className="pt-6 pb-4 px-4 space-y-2">
                   <div className="w-12 h-12 mx-auto rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center font-black text-white text-xs tracking-wider border border-white/20">
@@ -844,15 +911,20 @@ export default function VashuExactMerchantDashboard() {
 
         {/* TAB 2: PRICING RATES */}
         {activeTab === 'pricing' && (
-          <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-5 sm:p-6 max-w-xl mx-auto shadow-xl space-y-4 no-print">
+          <div
+            id="tour-pricing-box"
+            className={`bg-[#0b1021] border rounded-2xl p-5 sm:p-6 max-w-xl mx-auto shadow-xl space-y-4 no-print transition-all ${
+              tourActive && tourStep === 4 ? 'marching-ants-border' : 'border-slate-800/90'
+            }`}
+          >
             <div>
               <h2 className="text-sm font-bold text-white tracking-tight">Counter Print Rates (₹)</h2>
-              <p className="text-[11px] text-slate-400 mt-0.5">These prices are applied automatically when customers upload files at your QR.</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">These rates apply automatically when customers upload documents at your counter.</p>
             </div>
 
             {ratesSaved && (
-              <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-400 text-xs">
-                ✓ Rates updated and synced instantly!
+              <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-400 text-xs font-bold">
+                ✓ Rates updated and verified successfully!
               </div>
             )}
 
@@ -899,25 +971,30 @@ export default function VashuExactMerchantDashboard() {
             </div>
 
             <button
-              onClick={handleSaveRates}
-              disabled={savingRates}
-              className="w-full sm:w-auto px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-800 text-white font-semibold text-xs transition-all shadow-md cursor-pointer"
+              onClick={handleRequestSaveRates}
+              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-all shadow-md cursor-pointer flex items-center justify-center gap-1.5"
             >
-              {savingRates ? 'Saving Rates...' : 'Save New Rates'}
+              <span>🔒</span>
+              <span>Save New Rates (Secured)</span>
             </button>
           </div>
         )}
 
         {/* TAB 3: LIVE QUEUE */}
         {activeTab === 'queue' && (
-          <div className="bg-[#0b1021] border border-slate-800/90 rounded-2xl overflow-hidden shadow-xl no-print">
+          <div
+            id="tour-incoming-stream"
+            className={`bg-[#0b1021] border rounded-2xl overflow-hidden shadow-xl no-print transition-all ${
+              tourActive && tourStep === 8 ? 'marching-ants-border' : 'border-slate-800/90'
+            }`}
+          >
             <div className="px-5 py-3.5 border-b border-slate-800/80 flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Incoming Spooler Stream</span>
-              <span className="text-[10px] text-slate-500 font-mono">Auto-refreshes every 6s</span>
+              <span className="text-[10px] text-slate-500 font-mono">Real-time sync</span>
             </div>
             {orders.length === 0 ? (
               <div className="p-12 text-center text-slate-500 text-xs sm:text-sm">
-                No orders in queue yet. New prints will automatically stream here.
+                No orders in queue yet. Paid prints will stream here live.
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -973,7 +1050,7 @@ export default function VashuExactMerchantDashboard() {
       </main>
 
       {/* ------------------------------------------------------------- */}
-      {/* 3. ATTACHED CONTEXTUAL MICRO-TOOLTIP (STABLE POSITIONING)     */}
+      {/* 3. ATTACHED CONTEXTUAL MICRO-TOOLTIP (FLOATING BESIDE TARGET) */}
       {/* ------------------------------------------------------------- */}
       {tourActive && anchorRect && (
         <div
@@ -985,12 +1062,11 @@ export default function VashuExactMerchantDashboard() {
           }}
           className="w-80 sm:w-84 bg-[#0a0f1e] border-2 border-amber-400 rounded-2xl p-4 shadow-2xl shadow-amber-500/25 space-y-3 animate-in fade-in zoom-in-95 duration-150 no-print"
         >
-          {/* Arrow pointing directly up to target */}
           <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 w-4 h-4 bg-[#0a0f1e] border-t-2 border-l-2 border-amber-400 rotate-45"></div>
 
           <div className="flex items-center justify-between border-b border-slate-800 pb-2">
             <span className="text-[10px] font-bold font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
-              Step {tourStep} of 4
+              Step {tourStep} of 8
             </span>
             <button
               onClick={handleFinishTour}
@@ -1000,26 +1076,20 @@ export default function VashuExactMerchantDashboard() {
             </button>
           </div>
 
-          {/* STEP 1: STANDEE */}
+          {/* STEP 1: STANDEE POSTER */}
           {tourStep === 1 && (
             <div className="space-y-2">
               <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
                 <span>🪧</span>
-                <span>Print Your Store QR Standee</span>
+                <span>Print Your Store Standee</span>
               </h4>
               <p className="text-[11px] text-slate-300 leading-relaxed">
-                Click this button to see your store standee. Print and place this QR on your shop counter so customers can scan and upload files directly.
+                This is your custom Store Standee. Click &apos;PRINT STANDEE POSTER&apos; below, print it, and place it directly on your shop counter so customers can scan and upload files.
               </p>
-              <div className="pt-2 flex items-center justify-between">
-                <span className="text-[10px] text-amber-400 font-bold animate-pulse">
-                  👆 Click glowing tab above
-                </span>
+              <div className="pt-2 flex items-center justify-end">
                 <button
-                  onClick={() => {
-                    setActiveTab('standee');
-                    setTourStep(2);
-                  }}
-                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs rounded-xl cursor-pointer"
+                  onClick={() => setTourStep(2)}
+                  className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs rounded-xl cursor-pointer"
                 >
                   Next Step ➔
                 </button>
@@ -1027,7 +1097,7 @@ export default function VashuExactMerchantDashboard() {
             </div>
           )}
 
-          {/* STEP 2: PC & AGENT KEY */}
+          {/* STEP 2: PC AGENT & KEY */}
           {tourStep === 2 && (
             <div className="space-y-2">
               <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
@@ -1036,25 +1106,19 @@ export default function VashuExactMerchantDashboard() {
               </h4>
               <p className="text-[11px] text-slate-300 leading-relaxed">
                 1. Click <strong>&apos;PC Spooler (.zip)&apos;</strong> in header to download the app.<br />
-                2. Run it and paste this Agent Key once.<br />
-                Your counter printer is now linked.
+                2. Extract the folder and paste this <strong>Agent Key</strong> once.<br />
+                Your counter printer will connect silently.
               </p>
               <div className="pt-2 flex items-center justify-between">
                 <button
-                  onClick={() => {
-                    setActiveTab('standee');
-                    setTourStep(1);
-                  }}
+                  onClick={() => setTourStep(1)}
                   className="text-xs text-slate-400 hover:text-white cursor-pointer"
                 >
                   ← Back
                 </button>
                 <button
-                  onClick={() => {
-                    setActiveTab('pricing');
-                    setTourStep(3);
-                  }}
-                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs rounded-xl cursor-pointer"
+                  onClick={() => setTourStep(3)}
+                  className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs rounded-xl cursor-pointer"
                 >
                   Next Step ➔
                 </button>
@@ -1062,15 +1126,15 @@ export default function VashuExactMerchantDashboard() {
             </div>
           )}
 
-          {/* STEP 3: PRICING */}
+          {/* STEP 3: CLICK PRICING TAB PROMPT */}
           {tourStep === 3 && (
             <div className="space-y-2">
               <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
                 <span>🏷️</span>
-                <span>Click Here: Set Your Print Prices</span>
+                <span>Open Pricing Rates Tab</span>
               </h4>
               <p className="text-[11px] text-slate-300 leading-relaxed">
-                Click this button to set your rates. You can change prices for Black &amp; White and Color prints here. Click &apos;Save New Rates&apos; to update everywhere instantly.
+                Click the glowing <strong>&apos;Pricing Rates&apos;</strong> tab above to view and customize your per-page photocopy charges.
               </p>
               <div className="pt-2 flex items-center justify-between">
                 <button
@@ -1079,12 +1143,36 @@ export default function VashuExactMerchantDashboard() {
                 >
                   ← Back
                 </button>
+                <span className="text-[10px] text-amber-400 font-bold animate-pulse">
+                  👆 Click glowing tab above
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 4: PRICING TABLE DETAILS */}
+          {tourStep === 4 && (
+            <div className="space-y-2">
+              <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
+                <span>💰</span>
+                <span>Set Your Print Rates</span>
+              </h4>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                Change your rates for B&amp;W and Color copies here. Click &apos;Save New Rates&apos; to update customer charges everywhere instantly.
+              </p>
+              <div className="pt-2 flex items-center justify-between">
                 <button
                   onClick={() => {
-                    setActiveTab('queue');
-                    setTourStep(4);
+                    setActiveTab('standee');
+                    setTourStep(2);
                   }}
-                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs rounded-xl cursor-pointer"
+                  className="text-xs text-slate-400 hover:text-white cursor-pointer"
+                >
+                  ← Back
+                </button>
+                <button
+                  onClick={() => setTourStep(5)}
+                  className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs rounded-xl cursor-pointer"
                 >
                   Next Step ➔
                 </button>
@@ -1092,41 +1180,225 @@ export default function VashuExactMerchantDashboard() {
             </div>
           )}
 
-          {/* STEP 4: SUBSCRIPTION & LIVE QUEUE */}
-          {tourStep === 4 && (
+          {/* STEP 5: SUBSCRIPTION BANNER */}
+          {tourStep === 5 && (
             <div className="space-y-2">
               <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
-                <span>⚡</span>
-                <span>Subscription &amp; Live Orders</span>
+                <span>💳</span>
+                <span>Active Subscription &amp; Quota</span>
               </h4>
               <p className="text-[11px] text-slate-300 leading-relaxed">
-                • Check remaining validity days here. Click &apos;Top-Up&apos; for extra pages or &apos;Renew&apos; to extend days.<br />
-                • All incoming customer prints stream under &apos;Live Queue&apos; and print out automatically!
+                Check your remaining validity days and pages left. Click <strong>&apos;Top-Up&apos;</strong> for extra pages or <strong>&apos;Renew&apos;</strong> to add +28 days to your balance.
               </p>
               <div className="pt-2 flex items-center justify-between">
                 <button
-                  onClick={() => {
-                    setActiveTab('pricing');
-                    setTourStep(3);
-                  }}
+                  onClick={() => setTourStep(4)}
+                  className="text-xs text-slate-400 hover:text-white cursor-pointer"
+                >
+                  ← Back
+                </button>
+                <button
+                  onClick={() => setTourStep(6)}
+                  className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs rounded-xl cursor-pointer"
+                >
+                  Next Step ➔
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 6: CLICK LIVE QUEUE TAB PROMPT */}
+          {tourStep === 6 && (
+            <div className="space-y-2">
+              <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
+                <span>📋</span>
+                <span>Open Live Queue Tab</span>
+              </h4>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                Click the glowing <strong>&apos;Live Queue&apos;</strong> tab above to check customer transactions, live metrics, and stream.
+              </p>
+              <div className="pt-2 flex items-center justify-between">
+                <button
+                  onClick={() => setTourStep(5)}
+                  className="text-xs text-slate-400 hover:text-white cursor-pointer"
+                >
+                  ← Back
+                </button>
+                <span className="text-[10px] text-amber-400 font-bold animate-pulse">
+                  👆 Click glowing tab above
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 7: COUNTER METRICS & RECEIVER UPI */}
+          {tourStep === 7 && (
+            <div className="space-y-2">
+              <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
+                <span>📊</span>
+                <span>Revenue, Jobs &amp; UPI Receiver</span>
+              </h4>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                • <strong>Today&apos;s Revenue:</strong> Earnings collected today.<br />
+                • <strong>Total Jobs &amp; Queue:</strong> All completed &amp; waiting orders.<br />
+                • <strong>UPI Receiver:</strong> The account where customer payments land directly. You can update it securely using the &apos;Change&apos; button.
+              </p>
+              <div className="pt-2 flex items-center justify-between">
+                <button
+                  onClick={() => setTourStep(5)}
+                  className="text-xs text-slate-400 hover:text-white cursor-pointer"
+                >
+                  ← Back
+                </button>
+                <button
+                  onClick={() => setTourStep(8)}
+                  className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs rounded-xl cursor-pointer"
+                >
+                  Next Step ➔
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 8: INCOMING SPOOLER STREAM */}
+          {tourStep === 8 && (
+            <div className="space-y-2">
+              <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
+                <span>⚡</span>
+                <span>Incoming Spooler Stream</span>
+              </h4>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                Paid customer prints will stream here in real-time. Your PC Spooler automatically prints the physical copies and shreds the file immediately!
+              </p>
+              <div className="pt-2 flex items-center justify-between">
+                <button
+                  onClick={() => setTourStep(7)}
                   className="text-xs text-slate-400 hover:text-white cursor-pointer"
                 >
                   ← Back
                 </button>
                 <button
                   onClick={handleFinishTour}
-                  className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs rounded-xl shadow cursor-pointer"
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs uppercase tracking-wider rounded-xl shadow cursor-pointer"
                 >
-                  Done! Start Printing 🚀
+                  Continue to Dashboard 🚀
                 </button>
               </div>
             </div>
           )}
+
         </div>
       )}
 
       {/* ------------------------------------------------------------- */}
-      {/* 4. TWO-MODE MODAL: TOP-UP (PAGES ONLY) VS RENEW PLAN (+28D)   */}
+      {/* 4. SECURITY PASSWORD VERIFICATION MODAL                       */}
+      {/* ------------------------------------------------------------- */}
+      {securityModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 no-print animate-in fade-in duration-150">
+          <form onSubmit={handleVerifyAndCommit} className="bg-[#0b1021] border-2 border-indigo-500/60 rounded-3xl p-6 sm:p-7 max-w-sm w-full shadow-2xl space-y-4 relative">
+            <button
+              type="button"
+              onClick={() => {
+                setSecurityModalOpen(false);
+                setSecurityPassword('');
+                setSecurityError('');
+              }}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white text-base font-bold cursor-pointer"
+            >
+              ✕
+            </button>
+
+            <div className="text-center space-y-1">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-300 flex items-center justify-center text-lg mx-auto border border-amber-500/30">
+                🔒
+              </div>
+              <h3 className="text-sm sm:text-base font-black text-white">
+                Store Security Verification
+              </h3>
+              <p className="text-[11px] text-slate-400">
+                {securityAction === 'save_rates'
+                  ? 'Enter your store password to confirm print rates change.'
+                  : 'Enter your store password to confirm customer UPI receiver change.'}
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Store Password
+              </label>
+              <input
+                required
+                type="password"
+                placeholder="Enter store password"
+                value={securityPassword}
+                onChange={(e) => setSecurityPassword(e.target.value)}
+                className="w-full bg-[#070b18] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
+                autoFocus
+              />
+              {securityError && (
+                <p className="text-[11px] text-rose-400 font-bold">{securityError}</p>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              disabled={savingSecuredData || !securityPassword}
+              className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md cursor-pointer"
+            >
+              {savingSecuredData ? 'Verifying & Saving...' : 'Confirm & Apply Change ➔'}
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* 5. EDIT UPI RECEIVER MODAL                                    */}
+      {/* ------------------------------------------------------------- */}
+      {isEditUpiOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 no-print animate-in fade-in duration-150">
+          <div className="bg-[#0b1021] border border-indigo-500/40 rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4 relative">
+            <button
+              onClick={() => setIsEditUpiOpen(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white text-base font-bold cursor-pointer"
+            >
+              ✕
+            </button>
+
+            <div className="space-y-1">
+              <h3 className="text-sm font-black text-white flex items-center gap-1.5">
+                <span>💰</span>
+                <span>Change UPI Receiver ID</span>
+              </h3>
+              <p className="text-[11px] text-slate-400">
+                Customer payments will land directly into this UPI account.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Your Personal / Store UPI ID
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. yourname@okaxis or 9826xxxxxx@ybl"
+                value={newUpiId}
+                onChange={(e) => setNewUpiId(e.target.value)}
+                className="w-full bg-[#070b18] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-emerald-400 font-mono focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            <button
+              onClick={handleRequestSaveUpi}
+              className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow cursor-pointer"
+            >
+              Save New UPI (Requires Password) ➔
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* 6. TWO-MODE MODAL: TOP-UP (PAGES ONLY) VS RENEW PLAN (+28D)   */}
       {/* ------------------------------------------------------------- */}
       {isRenewModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto no-print">
