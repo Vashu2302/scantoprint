@@ -20,7 +20,9 @@ async function sendWelcomeEmail(shop: {
 
   try {
     const transporter = nodemailer.createTransport({
-      service: 'gmail',
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
       auth: {
         user: process.env.SUPPORT_EMAIL,
         pass: process.env.GMAIL_APP_PASSWORD,
@@ -37,70 +39,70 @@ async function sendWelcomeEmail(shop: {
     await transporter.sendMail({
       from: `"ScanToPrint Team" <${process.env.SUPPORT_EMAIL}>`,
       to: shop.email,
-      subject: `🎉 Welcome to ScanToPrint – आपकी दुकान अब हुई स्मार्ट और ऑटोमेटेड!`,
+      subject: `Welcome to ScanToPrint! Your store is now live 🚀`,
       html: `
-        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.07);">
           
-          <!-- Header Banner -->
-          <div style="background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); padding: 32px 24px; text-align: center;">
+          <!-- Banner -->
+          <div style="background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); padding: 36px 28px; text-align: center;">
             <h1 style="color: #ffffff; margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.5px;">ScanToPrint</h1>
             <p style="color: #e0e7ff; margin: 8px 0 0 0; font-size: 14px;">Next-Gen Zero-Touch Counter Printing</p>
           </div>
 
-          <!-- Body Content -->
-          <div style="padding: 32px 24px; color: #334155; line-height: 1.6;">
-            <h2 style="color: #1e293b; font-size: 20px; margin-top: 0;">
-              नमस्ते ${shop.ownerName || shop.businessName || 'पार्टनर'}, आपका हार्दिक स्वागत है! 🙏
+          <!-- Body -->
+          <div style="padding: 36px 28px; color: #334155; line-height: 1.6;">
+            <h2 style="color: #0f172a; font-size: 20px; margin-top: 0; font-weight: 700;">
+              Welcome aboard, ${shop.ownerName || shop.businessName || 'Partner'}! 👋
             </h2>
             
-            <p style="font-size: 14px;">
-              ScanToPrint परिवार से जुड़ने और अपनी दुकान को डिजिटल ऑटोमेशन की नई ऊँचाइयों पर ले जाने के लिए बहुत-बहुत बधाई। आपकी दुकान <strong>"${shop.businessName}"</strong> के लिए <strong>${planLabel}</strong> सफलतापूर्वक एक्टिवेट हो गया है।
+            <p style="font-size: 14.5px; color: #475569; margin: 0 0 20px 0;">
+              Congratulations on taking your print counter to the next level of digital automation. Your store <strong>"${shop.businessName}"</strong> has been successfully configured.
             </p>
 
-            <!-- Active Plan Card -->
-            <div style="background-color: #f8fafc; border-left: 4px solid #4f46e5; padding: 16px; border-radius: 6px; margin: 20px 0;">
-              <span style="font-size: 12px; font-weight: bold; color: #64748b; text-transform: uppercase;">एक्टिव प्लान:</span>
-              <div style="font-size: 16px; font-weight: bold; color: #1e293b; margin-top: 4px;">${planLabel}</div>
+            <!-- Plan Badge -->
+            <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid #4f46e5; padding: 18px; border-radius: 8px; margin: 24px 0;">
+              <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Active Subscription</span>
+              <div style="font-size: 18px; font-weight: 800; color: #1e293b; margin-top: 4px;">${planLabel}</div>
             </div>
 
-            <!-- Features -->
-            <h3 style="color: #1e293b; font-size: 15px; margin-bottom: 12px;">अब आपके काउंटर पर क्या बदलेगा?</h3>
-            <ul style="padding-left: 18px; margin: 0 0 24px 0; font-size: 13.5px; color: #475569;">
-              <li style="margin-bottom: 8px;"><strong>नो व्हाट्सएप झंझट:</strong> ग्राहक सीधे काउंटर QR स्कैन करेंगे और फाइल प्रिंट के लिए भेज देंगे।</li>
-              <li style="margin-bottom: 8px;"><strong>जीरो-टच ऑटो प्रिंट:</strong> फाइल आते ही सीधे आपके प्रिंटर से प्रिंट निकलेगी, आपको कंप्यूटर छूने की भी ज़रूरत नहीं।</li>
-              <li style="margin-bottom: 8px;"><strong>सीधे आपके खाते में UPI पेमेंट:</strong> बिना किसी कमीशन या देरी के पूरा पैसा सीधे आपके बैंक में।</li>
-              <li style="margin-bottom: 8px;"><strong>सुरक्षित और प्राइवेट:</strong> ग्राहकों की फाइल्स प्रिंट होते ही सुरक्षित तरीके से हट जाती हैं।</li>
+            <!-- Features Breakdown -->
+            <h3 style="color: #0f172a; font-size: 16px; margin: 28px 0 12px 0;">What happens next at your counter?</h3>
+            <ul style="padding-left: 20px; margin: 0 0 28px 0; font-size: 14px; color: #475569;">
+              <li style="margin-bottom: 10px;"><strong>Zero WhatsApp Clutter:</strong> Customers scan your custom counter QR and submit print jobs directly.</li>
+              <li style="margin-bottom: 10px;"><strong>Automated Spooling:</strong> Documents print automatically to your desk printer without touching your PC.</li>
+              <li style="margin-bottom: 10px;"><strong>Direct UPI Settlements:</strong> 100% customer payments land straight into your own UPI account.</li>
+              <li style="margin-bottom: 10px;"><strong>Data Privacy:</strong> Customer files are completely purged from storage right after printing.</li>
             </ul>
 
-            <!-- Support Promise -->
-            <div style="background-color: #ecfdf5; border: 1px dashed #10b981; border-radius: 12px; padding: 16px; text-align: center; margin: 24px 0;">
-              <h4 style="color: #065f46; margin: 0 0 6px 0; font-size: 15px;">🤝 हम हर कदम पर आपके साथ हैं!</h4>
-              <p style="color: #047857; font-size: 13px; margin: 0;">
-                सॉफ्टवेयर सेटअप, प्रिंटर जोड़ने या किसी भी तकनीकी सहायता के लिए हमारी सपोर्ट टीम हमेशा उपलब्ध है। आपका काम कभी नहीं रुकेगा।
+            <!-- Full Support Assurance -->
+            <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 20px; margin: 28px 0;">
+              <h4 style="color: #15803d; margin: 0 0 6px 0; font-size: 15px;">🤝 We've got your back!</h4>
+              <p style="color: #166534; font-size: 13.5px; margin: 0; line-height: 1.5;">
+                From setting up your desktop spooler agent to configuring multiple printers, our team is always ready to guide you. Your counter productivity is our top priority.
               </p>
             </div>
 
-            <!-- Direct Actions -->
-            <div style="text-align: center; margin: 28px 0;">
-              <a href="https://scantoprint.in/login" style="background-color: #4f46e5; color: #ffffff; padding: 12px 28px; text-decoration: none; font-size: 14px; font-weight: bold; border-radius: 8px; display: inline-block;">
-                डैशबोर्ड में लॉगिन करें ➔
+            <!-- Dashboard Button -->
+            <div style="text-align: center; margin: 32px 0;">
+              <a href="https://scantoprint.in/login" style="background-color: #4f46e5; color: #ffffff; padding: 13px 32px; text-decoration: none; font-size: 14px; font-weight: 700; border-radius: 10px; display: inline-block; box-shadow: 0 4px 10px rgba(79, 70, 229, 0.3);">
+                Access Merchant Dashboard ➔
               </a>
             </div>
 
-            <p style="font-size: 12px; color: #64748b; margin-top: 24px;">
-              यदि आपको कोई भी सहायता चाहिए, तो आप बेझिझक इस ईमेल पर रिप्लाई कर सकते हैं या सीधे <a href="mailto:scantoprint.support@gmail.com" style="color: #4f46e5;">scantoprint.support@gmail.com</a> पर संपर्क कर सकते हैं।
+            <p style="font-size: 13px; color: #64748b; margin-top: 28px;">
+              Have questions or need assistance? Reply directly to this email or reach our support desk at <a href="mailto:scantoprint.support@gmail.com" style="color: #4f46e5; text-decoration: none;">scantoprint.support@gmail.com</a>.
             </p>
           </div>
 
           <!-- Footer -->
-          <div style="background-color: #f1f5f9; padding: 16px 24px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0;">
-            ScanToPrint India • Empowering Local Print Shops with Smart Automation
+          <div style="background-color: #f8fafc; padding: 18px 24px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #f1f5f9;">
+            © ${new Date().getFullYear()} ScanToPrint India • Automated Smart Counter Printing
           </div>
         </div>
       `,
     });
   } catch (emailErr) {
-    console.error('Welcome email sending error:', emailErr);
+    console.error('Welcome email error:', emailErr);
   }
 }
 
@@ -126,7 +128,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // Format business name into URL-safe slug (e.g., "Lilima Prints" -> "lilima-prints")
+    // Format business name into URL-safe slug
     const formattedName = businessName
       .toLowerCase()
       .trim()
@@ -134,15 +136,14 @@ export async function POST(req: Request) {
       .replace(/-+/g, '-')
       .replace(/^-|-$/g, '');
 
-    // Extract last 4 digits of phone or generate 4 random digits
     const cleanedDigits = mobile.replace(/\D/g, '');
     const lastDigits = cleanedDigits.slice(-4) || Math.floor(1000 + Math.random() * 9000).toString();
     const generatedSlug = `${formattedName}-${lastDigits}`;
 
-    // Generate unique Desktop Spooler Agent API key
+    // Desktop Spooler Agent API key
     const secretApiKey = `STP_${Math.random().toString(36).substring(2, 8).toUpperCase()}_${Date.now().toString(36).toUpperCase()}`;
 
-    // Calculate subscription validity & quota based on selected plan
+    // Plan calculation
     const normalizedPlan = planType.toLowerCase();
     const normalizedCycle = billingCycle.toLowerCase();
 
@@ -150,13 +151,12 @@ export async function POST(req: Request) {
     let pageLimit = 500;
 
     if (normalizedPlan === 'premium') {
-      pageLimit = 999999; // Unlimited pages
+      pageLimit = 999999;
       durationDays = normalizedCycle === 'yearly' ? 365 : 28;
     } else if (normalizedPlan === 'standard') {
       pageLimit = 500;
       durationDays = normalizedCycle === 'yearly' ? 365 : 28;
     } else {
-      // Free trial
       pageLimit = 500;
       durationDays = 7;
     }
@@ -171,12 +171,12 @@ export async function POST(req: Request) {
       .from('shops')
       .insert([
         {
-          name: businessName,          // Fixes legacy NOT NULL constraint
-          business_name: businessName, // For new structure
+          name: businessName,
+          business_name: businessName,
           owner_name: ownerName || '',
           phone: mobile,
           email: email || '',
-          plain_password: password,   // Stored for emergency super-admin retrieval
+          plain_password: password,
           upi_id: upiId || '',
           slug: generatedSlug,
           api_key: secretApiKey,
@@ -193,7 +193,6 @@ export async function POST(req: Request) {
       .single();
 
     if (error) {
-      // Handle duplicate mobile number or slug conflict
       if (error.code === '23505') {
         return NextResponse.json(
           { message: 'This mobile number or shop is already registered.' },
