@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
+import HelpDeskModal from '@/components/HelpDeskModal';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -378,7 +379,6 @@ export default function VashuExactMerchantDashboard() {
     localStorage.setItem(`stp_tour_done_${slug}`, 'true');
     setActiveTab('queue');
   };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-[#070b14] text-slate-100 flex items-center justify-center font-sans">
@@ -1013,7 +1013,6 @@ export default function VashuExactMerchantDashboard() {
           </div>
         )}
       </main>
-
       {tourActive && anchorRect && (
         <div
           style={{
@@ -1548,6 +1547,9 @@ export default function VashuExactMerchantDashboard() {
           </div>
         </div>
       )}
+
+      {/* Reusable Self-Help Desk Component */}
+      <HelpDeskModal />
 
     </div>
   );
