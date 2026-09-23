@@ -110,7 +110,7 @@ export default function LegalPage() {
         </section>
 
         <div className="text-center pt-6 border-t border-slate-800/80 text-xs text-slate-500">
-          Have legal questions or compliance inquiries? Reach out to support@scantoprint.in.
+          Have legal questions or compliance inquiries? Reach out to scantoprint.support.com.
         </div>
       </main>
     </div>
