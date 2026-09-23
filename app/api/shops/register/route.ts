@@ -1,10 +1,108 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import nodemailer from 'nodemailer';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
+
+async function sendWelcomeEmail(shop: {
+  ownerName?: string;
+  businessName: string;
+  email: string;
+  planType: string;
+  slug: string;
+}) {
+  if (!shop.email || !process.env.SUPPORT_EMAIL || !process.env.GMAIL_APP_PASSWORD) {
+    return;
+  }
+
+  try {
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.SUPPORT_EMAIL,
+        pass: process.env.GMAIL_APP_PASSWORD,
+      },
+    });
+
+    const planLabel =
+      shop.planType === 'premium'
+        ? 'Premium Plan'
+        : shop.planType === 'standard'
+        ? 'Standard Plan'
+        : '7-Day Free Trial';
+
+    await transporter.sendMail({
+      from: `"ScanToPrint Team" <${process.env.SUPPORT_EMAIL}>`,
+      to: shop.email,
+      subject: `🎉 Welcome to ScanToPrint – आपकी दुकान अब हुई स्मार्ट और ऑटोमेटेड!`,
+      html: `
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+          
+          <!-- Header Banner -->
+          <div style="background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); padding: 32px 24px; text-align: center;">
+            <h1 style="color: #ffffff; margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.5px;">ScanToPrint</h1>
+            <p style="color: #e0e7ff; margin: 8px 0 0 0; font-size: 14px;">Next-Gen Zero-Touch Counter Printing</p>
+          </div>
+
+          <!-- Body Content -->
+          <div style="padding: 32px 24px; color: #334155; line-height: 1.6;">
+            <h2 style="color: #1e293b; font-size: 20px; margin-top: 0;">
+              नमस्ते ${shop.ownerName || shop.businessName || 'पार्टनर'}, आपका हार्दिक स्वागत है! 🙏
+            </h2>
+            
+            <p style="font-size: 14px;">
+              ScanToPrint परिवार से जुड़ने और अपनी दुकान को डिजिटल ऑटोमेशन की नई ऊँचाइयों पर ले जाने के लिए बहुत-बहुत बधाई। आपकी दुकान <strong>"${shop.businessName}"</strong> के लिए <strong>${planLabel}</strong> सफलतापूर्वक एक्टिवेट हो गया है।
+            </p>
+
+            <!-- Active Plan Card -->
+            <div style="background-color: #f8fafc; border-left: 4px solid #4f46e5; padding: 16px; border-radius: 6px; margin: 20px 0;">
+              <span style="font-size: 12px; font-weight: bold; color: #64748b; text-transform: uppercase;">एक्टिव प्लान:</span>
+              <div style="font-size: 16px; font-weight: bold; color: #1e293b; margin-top: 4px;">${planLabel}</div>
+            </div>
+
+            <!-- Features -->
+            <h3 style="color: #1e293b; font-size: 15px; margin-bottom: 12px;">अब आपके काउंटर पर क्या बदलेगा?</h3>
+            <ul style="padding-left: 18px; margin: 0 0 24px 0; font-size: 13.5px; color: #475569;">
+              <li style="margin-bottom: 8px;"><strong>नो व्हाट्सएप झंझट:</strong> ग्राहक सीधे काउंटर QR स्कैन करेंगे और फाइल प्रिंट के लिए भेज देंगे।</li>
+              <li style="margin-bottom: 8px;"><strong>जीरो-टच ऑटो प्रिंट:</strong> फाइल आते ही सीधे आपके प्रिंटर से प्रिंट निकलेगी, आपको कंप्यूटर छूने की भी ज़रूरत नहीं।</li>
+              <li style="margin-bottom: 8px;"><strong>सीधे आपके खाते में UPI पेमेंट:</strong> बिना किसी कमीशन या देरी के पूरा पैसा सीधे आपके बैंक में।</li>
+              <li style="margin-bottom: 8px;"><strong>सुरक्षित और प्राइवेट:</strong> ग्राहकों की फाइल्स प्रिंट होते ही सुरक्षित तरीके से हट जाती हैं।</li>
+            </ul>
+
+            <!-- Support Promise -->
+            <div style="background-color: #ecfdf5; border: 1px dashed #10b981; border-radius: 12px; padding: 16px; text-align: center; margin: 24px 0;">
+              <h4 style="color: #065f46; margin: 0 0 6px 0; font-size: 15px;">🤝 हम हर कदम पर आपके साथ हैं!</h4>
+              <p style="color: #047857; font-size: 13px; margin: 0;">
+                सॉफ्टवेयर सेटअप, प्रिंटर जोड़ने या किसी भी तकनीकी सहायता के लिए हमारी सपोर्ट टीम हमेशा उपलब्ध है। आपका काम कभी नहीं रुकेगा।
+              </p>
+            </div>
+
+            <!-- Direct Actions -->
+            <div style="text-align: center; margin: 28px 0;">
+              <a href="https://scantoprint.in/login" style="background-color: #4f46e5; color: #ffffff; padding: 12px 28px; text-decoration: none; font-size: 14px; font-weight: bold; border-radius: 8px; display: inline-block;">
+                डैशबोर्ड में लॉगिन करें ➔
+              </a>
+            </div>
+
+            <p style="font-size: 12px; color: #64748b; margin-top: 24px;">
+              यदि आपको कोई भी सहायता चाहिए, तो आप बेझिझक इस ईमेल पर रिप्लाई कर सकते हैं या सीधे <a href="mailto:scantoprint.support@gmail.com" style="color: #4f46e5;">scantoprint.support@gmail.com</a> पर संपर्क कर सकते हैं।
+            </p>
+          </div>
+
+          <!-- Footer -->
+          <div style="background-color: #f1f5f9; padding: 16px 24px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0;">
+            ScanToPrint India • Empowering Local Print Shops with Smart Automation
+          </div>
+        </div>
+      `,
+    });
+  } catch (emailErr) {
+    console.error('Welcome email sending error:', emailErr);
+  }
+}
 
 export async function POST(req: Request) {
   try {
@@ -103,6 +201,17 @@ export async function POST(req: Request) {
         );
       }
       return NextResponse.json({ message: error.message }, { status: 400 });
+    }
+
+    // Send welcome greeting email asynchronously
+    if (email && email.trim()) {
+      sendWelcomeEmail({
+        ownerName: ownerName || '',
+        businessName,
+        email: email.trim().toLowerCase(),
+        planType: normalizedPlan,
+        slug: generatedSlug,
+      }).catch((err) => console.error('Background welcome email failed:', err));
     }
 
     return NextResponse.json({
