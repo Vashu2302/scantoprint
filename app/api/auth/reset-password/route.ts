@@ -11,44 +11,46 @@ export async function POST(req: Request) {
     const { email, otp, newPassword } = await req.json();
 
     if (!email || !otp || !newPassword) {
-      return NextResponse.json({ error: 'All fields are required' }, { status: 400 });
-    }
-
-    if (newPassword.length < 6) {
-      return NextResponse.json({ error: 'Password must be at least 6 characters' }, { status: 400 });
+      return NextResponse.json({ error: 'सभी विवरण अनिवार्य हैं।' }, { status: 400 });
     }
 
     const cleanEmail = email.trim().toLowerCase();
 
-    // 1. चेक करें कि OTP सही है और 10 मिनट के अंदर है
-    const { data: record, error } = await supabase
-      .from('password_resets')
-      .select('*')
+    // Check user & verify OTP
+    const { data: shop, error: fetchError } = await supabase
+      .from('shops')
+      .select('id, reset_otp, reset_otp_expires_at')
       .eq('email', cleanEmail)
-      .eq('otp', otp.trim())
-      .gt('expires_at', new Date().toISOString())
-      .single();
+      .maybeSingle();
 
-    if (error || !record) {
-      return NextResponse.json({ error: 'Invalid or expired OTP. Please request a new one.' }, { status: 400 });
+    if (fetchError || !shop) {
+      return NextResponse.json({ error: 'दुकानदार अकाउंट नहीं मिला।' }, { status: 404 });
     }
 
-    // 2. पासवर्ड अपडेट करें (shops टेबल या Supabase Auth में)
+    if (!shop.reset_otp || shop.reset_otp !== otp.trim()) {
+      return NextResponse.json({ error: 'अमान्य OTP! कृपया दोबारा चेक करें।' }, { status: 400 });
+    }
+
+    if (new Date(shop.reset_otp_expires_at).getTime() < Date.now()) {
+      return NextResponse.json({ error: 'OTP की समय सीमा समाप्त (Expire) हो चुकी है।' }, { status: 400 });
+    }
+
+    // Update password & clear OTP
     const { error: updateError } = await supabase
       .from('shops')
-      .update({ password: newPassword })
-      .eq('email', cleanEmail);
+      .update({
+        plain_password: newPassword,
+        reset_otp: null,
+        reset_otp_expires_at: null,
+      })
+      .eq('id', shop.id);
 
     if (updateError) {
-      return NextResponse.json({ error: 'Failed to update password' }, { status: 500 });
+      return NextResponse.json({ error: 'पासवर्ड अपडेट नहीं हो सका।' }, { status: 500 });
     }
 
-    // 3. काम पूरा होने के बाद उपयोग किया गया OTP डिलीट कर दें
-    await supabase.from('password_resets').delete().eq('email', cleanEmail);
-
-    return NextResponse.json({ success: true, message: 'Password updated successfully!' });
+    return NextResponse.json({ success: true, message: 'Password reset successful' });
   } catch (err: any) {
-    console.error('Reset password error:', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: err.message || 'Internal Error' }, { status: 500 });
   }
 }
