@@ -1548,7 +1548,7 @@ export default function VashuExactMerchantDashboard() {
         </div>
       )}
 
-      {/* Reusable Self-Help Desk Component */}
+      {/* Pure English Self-Help Desk Component */}
       <HelpDeskModal />
 
     </div>
