@@ -13,53 +13,53 @@ const FAQ_DATA: FaqItem[] = [
   {
     id: 'printer-not-connecting',
     category: 'Spooler & Printing',
-    question: 'Desktop Spooler या Printer कनेक्ट नहीं हो रहा है?',
+    question: 'Desktop Spooler or Printer is not connecting?',
     answer: [
-      '1. सुनिश्चित करें कि आपका प्रिंटर USB या Wi-Fi से ऑन और पीसी से कनेक्टेड है।',
-      '2. ScanToPrint Desktop Spooler (.exe) ऐप को अपने कंप्यूटर पर "Run as Administrator" करें।',
-      '3. Spooler में अपनी सही Shop Slug और Desktop API Key डालकर "Connect" दबाएँ।',
-      '4. यदि स्टेटस "Connected" नहीं आ रहा है, तो Spooler को Restart करें और Windows Firewall चेक करें।'
+      '1. Ensure your physical printer is powered ON and connected via USB or local Wi-Fi.',
+      '2. Launch ScanToPrint Desktop Spooler (.exe) on your PC by right-clicking and selecting "Run as Administrator".',
+      '3. Verify that your Store Slug and Desktop API Key are correctly entered, then click "Connect".',
+      '4. If the status remains offline, restart the spooler app and ensure Windows Firewall is not blocking outgoing traffic.'
     ]
   },
   {
     id: 'print-not-coming',
     category: 'Spooler & Printing',
-    question: 'ग्राहक ने पेमेंट कर दी पर प्रिंट नहीं निकल रहा?',
+    question: 'Customer paid successfully but document is not printing?',
     answer: [
-      '1. अपने डैशबोर्ड में चेक करें कि क्या प्रिंटर का स्टेटस "Online" (हरा बिंदु) दिख रहा है।',
-      '2. प्रिंटर में पेपर और स्याही (Ink) की मात्रा चेक करें।',
-      '3. Windows के "Printers & Scanners" में जाकर डिफॉल्ट प्रिंटर चेक करें। Spooler हमेशा डिफ़ॉल्ट प्रिंटर पर जॉब भेजता है।',
-      '4. अगर प्रिंटर "Paused" या "Offline" है, तो उसे रिस्टार्ट करें।'
+      '1. Check your live dashboard to confirm if the printer shows an "Online" status (green dot indicator).',
+      '2. Verify hardware essentials: ensure paper tray is stocked and ink/toner levels are sufficient.',
+      '3. Open Windows "Printers & Scanners" and ensure your counter printer is set as the Default Printer.',
+      '4. Open the Windows Print Queue to ensure no pending or stuck jobs are paused.'
     ]
   },
   {
     id: 'login-password-issue',
     category: 'Account & Login',
-    question: 'लॉगिन नहीं हो रहा या पासवर्ड भूल गए हैं?',
+    question: 'Unable to login or forgot your store password?',
     answer: [
-      '1. लॉगिन पेज पर अपना 10-अंकों का रजिस्टर्ड मोबाइल नंबर या ईमेल आईडी सही दर्ज करें।',
-      '2. यदि पासवर्ड याद नहीं है, तो लॉगिन बॉक्स में दिए गए "Forgot Password?" पर क्लिक करें।',
-      '3. आपके ईमेल पर 6-डिजिट का सुरक्षित OTP आएगा, जिसे दर्ज करके आप नया पासवर्ड सेट कर सकते हैं।'
+      '1. On the login page, enter your registered 10-digit mobile number or store email address accurately.',
+      '2. If you do not remember your password, click the "Forgot Password?" link.',
+      '3. Enter your email to receive a secure 6-digit numeric OTP instantly, then set your new password.'
     ]
   },
   {
     id: 'plan-renewal-utr',
     category: 'Payments & Plans',
-    question: 'प्लान रिन्यूअल या टॉप-अप का UTR अप्रूव नहीं हुआ?',
+    question: 'Plan renewal or quota top-up UTR is pending approval?',
     answer: [
-      '1. भुगतान करने के बाद अपने GPay/PhonePe से 12-अंकों का UTR/Ref नंबर ठीक से सबमिट करें।',
-      '2. व्यवस्थापक (Admin) द्वारा बैंक स्टेटमेंट चेक करके इसे 15 से 30 मिनट में अप्रूव कर दिया जाता है।',
-      '3. अप्रूव होते ही आपके डैशबोर्ड में तुरंत +28 दिन या पेज कोटा अपडेट हो जाएगा।'
+      '1. After completing UPI payment, submit the exact 12-digit UTR / Transaction Reference number from GPay or PhonePe.',
+      '2. Admin verifies bank transaction statements within 15 to 30 minutes during business hours.',
+      '3. Upon approval, your account instantly receives +28 days validity extension or additional page quotas.'
     ]
   },
   {
     id: 'agent-commission-payout',
     category: 'Agent & Commission',
-    question: 'एजेंट कमीशन या UPI Payout कैसे मिलेगा?',
+    question: 'How do referral commissions and UPI payouts work?',
     answer: [
-      '1. जब भी कोई दुकानदार आपके प्रोमो कोड से जुड़ेगा, आपके वॉलेट में कमीशन तुरंत क्रेडिट हो जाएगा।',
-      '2. एजेंट डैशबोर्ड में "Request Payout" पर क्लिक करें।',
-      '3. एडमिन द्वारा आपके दिए गए UPI ID पर भुगतान भेजकर 12-डिजिट का UTR नंबर सिस्टम में अपडेट कर दिया जाता है।'
+      '1. When a new print shop registers using your promo code, commission is credited to your wallet balance.',
+      '2. In the Partner Portal, enter your withdrawal amount (minimum ₹100) and click "Submit Request".',
+      '3. Admin settles funds directly to your saved UPI ID with reference UTR number updated in history.'
     ]
   }
 ];
@@ -83,7 +83,7 @@ export default function HelpDeskModal() {
 
   return (
     <>
-      {/* Floating Help Desk Button */}
+      {/* Floating Trigger Button */}
       <button
         type="button"
         onClick={() => {
@@ -96,20 +96,24 @@ export default function HelpDeskModal() {
         <span>Need Help?</span>
       </button>
 
-      {/* Help Modal Popup */}
+      {/* Modal Dialog */}
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-[#0b1021] border border-slate-800 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
             
-            {/* Modal Header */}
+            {/* Header with Website Logo */}
             <div className="p-5 border-b border-slate-800 bg-[#070b18] flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center font-bold text-sm border border-indigo-500/30">
-                  ⚡
+                <div className="w-8 h-8 rounded-xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center p-1.5 shrink-0">
+                  <img
+                    src="/icon.svg"
+                    alt="ScanToPrint Logo"
+                    className="w-full h-full object-contain"
+                  />
                 </div>
                 <div>
                   <h3 className="font-bold text-white text-sm">ScanToPrint Help Desk</h3>
-                  <p className="text-[11px] text-slate-400">Instant answers to common store issues</p>
+                  <p className="text-[11px] text-slate-400">Instant answers to counter &amp; spooler issues</p>
                 </div>
               </div>
 
@@ -122,10 +126,9 @@ export default function HelpDeskModal() {
               </button>
             </div>
 
-            {/* Modal Content */}
+            {/* Modal Body */}
             <div className="p-5 overflow-y-auto space-y-4">
               {selectedFaq ? (
-                /* FAQ Detail View */
                 <div className="space-y-4 animate-in fade-in duration-150">
                   <button
                     type="button"
@@ -150,7 +153,6 @@ export default function HelpDeskModal() {
                     ))}
                   </div>
 
-                  {/* Feedback: Is this helpful? */}
                   <div className="border-t border-slate-800 pt-4 space-y-3">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-slate-400">Did this solve your problem?</span>
@@ -180,28 +182,26 @@ export default function HelpDeskModal() {
                       </div>
                     </div>
 
-                    {/* Thank You Note */}
                     {feedback === 'yes' && (
                       <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-xs font-medium text-center">
                         ✓ Glad we could help! Your counter is ready to print.
                       </div>
                     )}
 
-                    {/* Fallback to Support Email if Not Helpful */}
                     {feedback === 'no' && (
                       <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl text-xs space-y-2">
                         <p className="font-semibold text-amber-300">
-                          We&apos;re sorry this didn&apos;t resolve your issue!
+                          Need further assistance?
                         </p>
                         <p className="text-slate-300 leading-relaxed">
-                          Please email your issue or printer error screenshot directly to our technical desk:
+                          Please email your issue or printer error screenshot directly to our technical team:
                         </p>
                         <div className="pt-1">
                           <a
-                            href="mailto:scantoprint.support@gmail.com?subject=Need Help with ScanToPrint"
+                            href="mailto:scantoprint.support@gmail.com?subject=Merchant Support Assistance"
                             className="inline-flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-[11px] transition-all"
                           >
-                            ✉️ Email Us: scantoprint.support@gmail.com
+                            ✉️ Email: scantoprint.support@gmail.com
                           </a>
                         </div>
                       </div>
@@ -209,7 +209,6 @@ export default function HelpDeskModal() {
                   </div>
                 </div>
               ) : (
-                /* Question List View */
                 <div className="space-y-3">
                   <input
                     type="text"
@@ -242,7 +241,6 @@ export default function HelpDeskModal() {
                     ))}
                   </div>
 
-                  {/* Direct Contact Footer */}
                   <div className="pt-3 border-t border-slate-800 text-center">
                     <p className="text-[11px] text-slate-400">
                       Need custom assistance? Write to{' '}
