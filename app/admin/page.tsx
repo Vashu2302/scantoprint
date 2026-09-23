@@ -216,9 +216,10 @@ export default function AdminSuperDashboard() {
     const topupPages = Number(shop.pending_action_pages || 100);
     const expectedAmount = Number(shop.pending_action_amount || (isTopup ? 50 : 149));
 
+    const promoApplied = shop.applied_promo_code || shop.pending_promo_code;
     const confirmPrompt = isTopup
       ? `Confirm TOP-UP payment of ₹${expectedAmount} for "${shop.business_name || shop.name}"?\n\nThis will add +${topupPages} pages to their quota WITHOUT altering their validity days.`
-      : `Confirm PLAN RENEWAL payment of ₹${expectedAmount} for "${shop.business_name || shop.name}"?\n\nThis will activate their 28-day plan.`;
+      : `Confirm PLAN RENEWAL payment of ₹${expectedAmount}${promoApplied ? ` (Promo: ${promoApplied})` : ''} for "${shop.business_name || shop.name}"?\n\nThis will activate their 28-day plan.`;
 
     if (!confirm(confirmPrompt)) return;
 
@@ -230,6 +231,7 @@ export default function AdminSuperDashboard() {
       pending_action_type: null,
       pending_action_pages: null,
       pending_action_amount: null,
+      pending_promo_code: null,
     };
 
     if (isTopup) {
@@ -322,6 +324,7 @@ export default function AdminSuperDashboard() {
         pending_action_type: null,
         pending_action_pages: null,
         pending_action_amount: null,
+        pending_promo_code: null,
       })
       .eq('id', shop.id);
 
@@ -504,7 +507,8 @@ export default function AdminSuperDashboard() {
 
   shops.forEach((s) => {
     const p = (s.plan_type || 'trial').toLowerCase();
-    const cost = getShopPlanCost(p, s.billing_cycle, Boolean(s.referred_by_code));
+    const actualPaid = Number(s.subscription_paid_amount || s.pending_action_amount);
+    const cost = actualPaid > 0 ? actualPaid : getShopPlanCost(p, s.billing_cycle, Boolean(s.referred_by_code));
 
     if (cost > 0 && (s.payment_utr || s.payment_verified)) {
       lifetimeSaaSFees += cost;
@@ -559,7 +563,8 @@ export default function AdminSuperDashboard() {
       s.slug?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.phone?.includes(searchQuery) ||
       s.payment_utr?.includes(searchQuery) ||
-      s.referred_by_code?.toLowerCase().includes(searchQuery.toLowerCase())
+      s.referred_by_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.applied_promo_code?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const filteredPartners = partners.filter(
@@ -570,7 +575,6 @@ export default function AdminSuperDashboard() {
       p.referral_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.upi_id?.toLowerCase().includes(searchQuery.toLowerCase())
   );
-
   return (
     <div className="min-h-screen bg-[#060813] text-slate-200 font-sans p-6 sm:p-8 space-y-6">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -673,7 +677,7 @@ export default function AdminSuperDashboard() {
           </div>
         )}
 
-        {/* 2. PENDING SHOP UTR ALERT BOX (DISTINGUISHES TOP-UP VS PLAN RENEWAL) */}
+        {/* 2. PENDING SHOP UTR ALERT BOX WITH PROMO & ACTUAL PAID AMOUNT */}
         {pendingUtrShops.length > 0 && (
           <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-5 shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
@@ -684,7 +688,7 @@ export default function AdminSuperDashboard() {
                 </h2>
               </div>
               <span className="text-[11px] text-amber-200/70 font-sans">
-                Check amount and UTR in your PhonePe / GPay statement.
+                Check exact amount and UTR in your PhonePe / GPay statement.
               </span>
             </div>
 
@@ -692,7 +696,17 @@ export default function AdminSuperDashboard() {
               {pendingUtrShops.map((ps) => {
                 const isTopup = ps.pending_action_type === 'quota_topup';
                 const topupPages = ps.pending_action_pages || 100;
-                const expectedPrice = ps.pending_action_amount || (isTopup ? 50 : (ps.plan_type === 'premium' ? 249 : 149));
+                
+                // Original Catalog Price
+                const baseCatalogPrice = isTopup ? 50 : (ps.plan_type === 'premium' ? 249 : 149);
+
+                // Exact Amount Paid by Customer (from checkout or fallback)
+                const actualPaidPrice = ps.pending_action_amount 
+                  ? Number(ps.pending_action_amount)
+                  : (ps.subscription_paid_amount ? Number(ps.subscription_paid_amount) : baseCatalogPrice);
+
+                // Check Promo Code
+                const appliedPromo = ps.applied_promo_code || ps.pending_promo_code || (actualPaidPrice < baseCatalogPrice ? '20% OFF' : null);
 
                 return (
                   <div key={ps.id} className="bg-[#070b18] border border-slate-800 rounded-xl p-4 space-y-3 relative overflow-hidden">
@@ -707,7 +721,7 @@ export default function AdminSuperDashboard() {
                         )}
                       </div>
                       
-                      {/* Price & Badge */}
+                      {/* Price & Promo Badge */}
                       <div className="text-right">
                         <span className={`text-[9px] font-mono font-bold uppercase px-2 py-0.5 rounded border inline-block ${
                           isTopup
@@ -716,9 +730,25 @@ export default function AdminSuperDashboard() {
                         }`}>
                           {isTopup ? 'QUOTA TOP-UP' : (ps.plan_type || 'STANDARD').toUpperCase()}
                         </span>
-                        <div className="text-base font-black font-mono text-emerald-400 pt-0.5">
-                          ₹{expectedPrice}
+                        
+                        <div className="flex items-center justify-end gap-1.5 pt-0.5">
+                          {appliedPromo && actualPaidPrice < baseCatalogPrice && (
+                            <span className="text-[11px] line-through text-slate-500 font-mono">
+                              ₹{baseCatalogPrice}
+                            </span>
+                          )}
+                          <div className="text-base font-black font-mono text-emerald-400">
+                            ₹{actualPaidPrice}
+                          </div>
                         </div>
+
+                        {appliedPromo && (
+                          <div className="mt-1">
+                            <span className="inline-flex items-center gap-1 text-[9px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded">
+                              🏷️ Promo: {appliedPromo}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -810,7 +840,7 @@ export default function AdminSuperDashboard() {
               <div className="flex items-center gap-2">
                 <span className="text-indigo-400 font-bold text-sm">📦 Spooler Package URL (.exe)</span>
                 <span className="text-[10px] bg-indigo-500/10 text-indigo-300 px-2 py-0.5 rounded border border-indigo-500/20 font-mono">
-                  Google Drive Direct
+                  GitHub / Direct ZIP
                 </span>
               </div>
               {agentDriveUrl && (
@@ -825,13 +855,13 @@ export default function AdminSuperDashboard() {
               )}
             </div>
             <p className="text-[11px] text-slate-400">
-              When updating `.exe`, upload to Drive and paste the link here.
+              When updating `.exe`, upload to GitHub Releases and paste the link here.
             </p>
 
             <div className="flex items-center gap-3 pt-1">
               <input
                 type="text"
-                placeholder="Paste Google Drive Direct/Share Link..."
+                placeholder="Paste GitHub Release Direct Link or Drive Link..."
                 value={agentDriveUrl}
                 onChange={(e) => setAgentDriveUrl(e.target.value)}
                 className="flex-1 bg-[#070b18] border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
