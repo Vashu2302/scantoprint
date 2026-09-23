@@ -29,6 +29,7 @@ function RegisterMerchantForm() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [adminUpi, setAdminUpi] = useState<string>('9826000000@ybl');
   const [utrNumber, setUtrNumber] = useState<string>('');
@@ -47,7 +48,8 @@ function RegisterMerchantForm() {
     mobile: '',
     upiId: '',
     email: '',
-    password: ''
+    password: '',
+    confirmPassword: ''
   });
 
   useEffect(() => {
@@ -182,6 +184,12 @@ function RegisterMerchantForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
+
+    if (form.password !== form.confirmPassword) {
+      setErrorMessage('Passwords do not match! Please check again.');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -189,7 +197,12 @@ function RegisterMerchantForm() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...form,
+          ownerName: form.ownerName,
+          businessName: form.businessName,
+          mobile: form.mobile,
+          upiId: form.upiId,
+          email: form.email,
+          password: form.password,
           planType: activePlan,
           billingCycle: billingCycle,
           referredByCode: appliedCode || null
@@ -571,7 +584,7 @@ function RegisterMerchantForm() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-300">
-                      Email Address
+                      Email Address <span className="text-indigo-400">*</span>
                     </label>
                     <input
                       required
@@ -610,6 +623,32 @@ function RegisterMerchantForm() {
                   </div>
                 </div>
 
+                {/* Confirm Password Field */}
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-300">
+                    Confirm Password <span className="text-indigo-400">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      required
+                      name="confirmPassword"
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      minLength={6}
+                      placeholder="Re-enter password"
+                      value={form.confirmPassword}
+                      onChange={handleChange}
+                      className="w-full bg-[#070b18] border border-slate-800 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 pr-10 text-xs text-white placeholder-slate-500 focus:outline-none font-mono transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword((prev) => !prev)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-slate-400 hover:text-slate-200 cursor-pointer select-none"
+                    >
+                      {showConfirmPassword ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                </div>
+
                 {/* Referral Code Field - ALWAYS VISIBLE IN ALL PLANS (INCLUDING TRIAL) */}
                 <div className="bg-[#070b18] border border-slate-800 p-3.5 rounded-2xl space-y-2">
                   <div className="flex items-center justify-between">
@@ -642,8 +681,8 @@ function RegisterMerchantForm() {
                     ) : (
                       <button
                         type="button"
-                        disabled={checkingCode || !referralInput.trim()}
                         onClick={handleApplyReferral}
+                        disabled={checkingCode || !referralInput.trim()}
                         className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md cursor-pointer"
                       >
                         {checkingCode ? 'Checking...' : 'Apply Code'}

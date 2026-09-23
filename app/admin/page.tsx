@@ -218,7 +218,7 @@ export default function AdminSuperDashboard() {
 
     const confirmPrompt = isTopup
       ? `Confirm TOP-UP payment of ₹${expectedAmount} for "${shop.business_name || shop.name}"?\n\nThis will add +${topupPages} pages to their quota WITHOUT altering their validity days.`
-      : `Confirm PLAN RENEWAL payment of ₹${expectedAmount} for "${shop.business_name || shop.name}"?\n\nThis will add +28 DAYS to their current remaining validity (no days lost).`;
+      : `Confirm PLAN RENEWAL payment of ₹${expectedAmount} for "${shop.business_name || shop.name}"?\n\nThis will activate their 28-day plan.`;
 
     if (!confirm(confirmPrompt)) return;
 
@@ -226,21 +226,24 @@ export default function AdminSuperDashboard() {
       payment_verified: true,
       subscription_status: 'active',
       is_paused: false,
-      payment_utr: shop.payment_utr, // keep verified ref
+      payment_utr: shop.payment_utr,
       pending_action_type: null,
       pending_action_pages: null,
       pending_action_amount: null,
     };
 
     if (isTopup) {
-      // Top-up: Add pages to existing limit, DO NOT change subscription_end
       const currentLimit = Number(shop.page_limit || 500);
       updatePayload.page_limit = currentLimit + topupPages;
     } else {
-      // Plan Renew: Add +28 Days on top of existing remaining time
-      const currentEnd = shop.subscription_end ? new Date(shop.subscription_end) : new Date();
-      const baseDate = currentEnd.getTime() > Date.now() ? currentEnd : new Date();
-      const newEndDate = new Date(baseDate.getTime() + 28 * 24 * 60 * 60 * 1000);
+      let newEndDate: Date;
+      if (!shop.payment_verified && shop.subscription_end) {
+        newEndDate = new Date(shop.subscription_end);
+      } else {
+        const currentEnd = shop.subscription_end ? new Date(shop.subscription_end) : new Date();
+        const baseDate = currentEnd.getTime() > Date.now() ? currentEnd : new Date();
+        newEndDate = new Date(baseDate.getTime() + 28 * 24 * 60 * 60 * 1000);
+      }
 
       updatePayload.subscription_end = newEndDate.toISOString();
       if (shop.pending_action_plan) {
@@ -261,7 +264,6 @@ export default function AdminSuperDashboard() {
       return;
     }
 
-    // Auto-credit Partner Commission if first time referred
     if (shop.referred_by_code && !shop.commission_credited && !isTopup) {
       const plan = (shop.plan_type || 'standard').toLowerCase();
       const commission = plan === 'premium' ? 150 : 100;
@@ -305,7 +307,7 @@ export default function AdminSuperDashboard() {
     alert(
       isTopup
         ? `✓ Top-up Approved! +${topupPages} pages added to "${shop.business_name || shop.name}". Days remaining untouched.`
-        : `✓ Plan Renewed! +28 days successfully appended to "${shop.business_name || shop.name}".`
+        : `✓ Plan Approved! Validity active for 28 days for "${shop.business_name || shop.name}".`
     );
   };
 
@@ -332,7 +334,6 @@ export default function AdminSuperDashboard() {
     }
   };
 
-  // Settle Payout
   const handleSettlePayout = async (payout: any) => {
     const utr = (payoutUtrMap[payout.id] || '').trim();
     if (utr.length < 4) {
@@ -478,9 +479,6 @@ export default function AdminSuperDashboard() {
     );
   }
 
-  // ==========================================
-  // CALCULATIONS: SHOPS DOMAIN
-  // ==========================================
   const getShopPlanCost = (planType?: string, billingCycle?: string, hasReferral?: boolean) => {
     const p = (planType || '').toLowerCase();
     const c = (billingCycle || '').toLowerCase();

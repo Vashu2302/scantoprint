@@ -79,9 +79,17 @@ export default function MerchantLoginPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
-              Password
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-semibold text-slate-300 uppercase">
+                Password
+              </label>
+              <Link
+                href="/forgot-password"
+                className="text-[11px] text-indigo-400 hover:text-indigo-300 hover:underline"
+              >
+                Forgot Password?
+              </Link>
+            </div>
             <input
               type="password"
               required
