@@ -15,6 +15,7 @@ async function sendWelcomeEmail(shop: {
   slug: string;
 }) {
   if (!shop.email || !process.env.SUPPORT_EMAIL || !process.env.GMAIL_APP_PASSWORD) {
+    console.warn('Welcome email skipped: Missing email or SMTP env variables');
     return;
   }
 
@@ -101,6 +102,7 @@ async function sendWelcomeEmail(shop: {
         </div>
       `,
     });
+    console.log('Welcome email successfully dispatched to:', shop.email);
   } catch (emailErr) {
     console.error('Welcome email error:', emailErr);
   }
@@ -202,15 +204,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: error.message }, { status: 400 });
     }
 
-    // Send welcome greeting email asynchronously
+    // Await email delivery to ensure Vercel doesn't kill the runtime
     if (email && email.trim()) {
-      sendWelcomeEmail({
-        ownerName: ownerName || '',
-        businessName,
-        email: email.trim().toLowerCase(),
-        planType: normalizedPlan,
-        slug: generatedSlug,
-      }).catch((err) => console.error('Background welcome email failed:', err));
+      try {
+        await sendWelcomeEmail({
+          ownerName: ownerName || '',
+          businessName,
+          email: email.trim().toLowerCase(),
+          planType: normalizedPlan,
+          slug: generatedSlug,
+        });
+      } catch (e) {
+        console.error('Email sending failed in registration flow:', e);
+      }
     }
 
     return NextResponse.json({
