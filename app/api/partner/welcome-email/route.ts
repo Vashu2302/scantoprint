@@ -9,9 +9,9 @@ export async function POST(req: Request) {
     }
 
     const cleanEmail = email.trim().toLowerCase();
-    const senderEmail = process.env.SUPPORT_EMAIL || 'support@scantoprint.in';
+    const senderEmail = process.env.SUPPORT_EMAIL || 'scantoprint.support@gmail.com';
 
-    const plainText = `Hello ${fullName},\n\nWelcome to the ScanToPrint Partner Program!\n\nYour Partner Details:\n- Referral Promo Code: ${referralCode}\n- Registered Phone (Login ID): ${phone}\n- Settlement UPI ID: ${upiId}\n\nEarning Structure:\n- ₹100 direct commission on Standard plan subscriptions\n- ₹150 direct commission on Premium plan subscriptions\n\nLogin to your partner dashboard: https://scantoprint.in/partner/login\n\nScanToPrint Support\n${senderEmail}`;
+    const plainText = `Hello ${fullName},\n\nYour ScanToPrint Partner account has been activated successfully.\n\nAccount Details:\n- Referral Code: ${referralCode}\n- Registered ID: ${phone}\n- Linked UPI: ${upiId}\n\nYou can access your portal here: https://scantoprint.in/partner/login\n\nBest regards,\nScanToPrint Team\n${senderEmail}`;
 
     const htmlContent = `
       <!DOCTYPE html>
@@ -19,64 +19,54 @@ export async function POST(req: Request) {
       <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Welcome to ScanToPrint</title>
+        <title>Account Confirmation</title>
       </head>
-      <body style="margin: 0; padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; color: #1e293b;">
-        <div style="max-width: 500px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 32px 24px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+      <body style="margin: 0; padding: 24px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #ffffff; color: #1e293b;">
+        <div style="max-width: 480px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px;">
           
-          <div style="margin-bottom: 24px;">
-            <h2 style="margin: 0; color: #4338ca; font-size: 20px; font-weight: 800; letter-spacing: -0.5px;">ScanToPrint</h2>
-            <span style="font-size: 12px; color: #64748b;">Partner Onboarding</span>
+          <div style="margin-bottom: 20px;">
+            <h2 style="margin: 0; color: #4338ca; font-size: 20px; font-weight: 700;">ScanToPrint</h2>
+            <div style="font-size: 12px; color: #64748b; margin-top: 2px;">Partner Account Confirmation</div>
           </div>
 
-          <p style="font-size: 14px; line-height: 1.6; margin: 0 0 14px 0; color: #334155;">
+          <p style="font-size: 14px; line-height: 1.5; color: #334155; margin: 0 0 14px 0;">
             Hello <strong>${fullName}</strong>,
           </p>
-          <p style="font-size: 14px; line-height: 1.6; margin: 0 0 20px 0; color: #475569;">
-            Welcome to the ScanToPrint Partner Program. Your account is active, and you can now start onboarding print and photocopy shops in your area.
+          <p style="font-size: 14px; line-height: 1.5; color: #475569; margin: 0 0 20px 0;">
+            Your partner profile has been created and verified. Below are your account details for reference:
           </p>
 
-          <div style="background-color: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 8px; padding: 16px; margin: 20px 0;">
-            <span style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: #4338ca; letter-spacing: 0.5px; display: block; margin-bottom: 10px;">
-              Account Summary
-            </span>
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 14px 18px; margin: 18px 0;">
             <p style="margin: 6px 0; font-size: 13px; color: #334155;">
-              <strong>Promo Code:</strong> <span style="font-family: monospace; font-size: 14px; font-weight: 700; color: #b45309; background: #fef3c7; padding: 2px 6px; border-radius: 4px;">${referralCode}</span>
+              <strong>Referral Code:</strong> <span style="font-family: monospace; font-weight: 700; color: #1e293b;">${referralCode}</span>
             </p>
             <p style="margin: 6px 0; font-size: 13px; color: #334155;">
-              <strong>Login ID:</strong> <span style="font-family: monospace;">${phone}</span>
+              <strong>Registered ID:</strong> <span style="font-family: monospace; color: #1e293b;">${phone}</span>
             </p>
             <p style="margin: 6px 0; font-size: 13px; color: #334155;">
-              <strong>Settlement UPI:</strong> <span style="font-family: monospace; color: #059669;">${upiId}</span>
+              <strong>Settlement UPI:</strong> <span style="font-family: monospace; color: #1e293b;">${upiId}</span>
             </p>
           </div>
 
-          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
-            <span style="font-size: 12px; font-weight: 700; color: #0f172a; display: block; margin-bottom: 8px;">
-              Earning Structure
-            </span>
-            <ul style="margin: 0; padding-left: 18px; font-size: 13px; color: #475569; line-height: 1.6;">
-              <li><strong>₹100 commission</strong> per Standard plan subscription</li>
-              <li><strong>₹150 commission</strong> per Premium plan subscription</li>
-              <li>Direct monthly payouts to your registered UPI ID</li>
-            </ul>
-          </div>
+          <p style="font-size: 13px; line-height: 1.5; color: #475569; margin: 16px 0 20px 0;">
+            You can sign in to view your dashboard, monitor linked stores, and track payouts at:
+            <br />
+            <a href="https://scantoprint.in/partner/login" style="color: #4338ca; font-weight: 600; text-decoration: underline;">https://scantoprint.in/partner/login</a>
+          </p>
 
-          <div style="text-align: center; margin: 24px 0 16px 0;">
-            <a href="https://scantoprint.in/partner/login" style="background-color: #4338ca; color: #ffffff; padding: 10px 24px; font-size: 13px; font-weight: 600; text-decoration: none; border-radius: 6px; display: inline-block;">
-              Open Partner Dashboard
-            </a>
-          </div>
+          <p style="font-size: 12px; color: #64748b; margin: 0 0 16px 0;">
+            If you did not request this account registration, please contact our support team.
+          </p>
 
-          <div style="border-top: 1px solid #f1f5f9; padding-top: 18px; font-size: 11px; color: #94a3b8; text-align: center; line-height: 1.5;">
-            ScanToPrint Partner Support • <a href="mailto:${senderEmail}" style="color: #6366f1; text-decoration: none;">${senderEmail}</a>
+          <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 20px 0;" />
+          <div style="font-size: 11px; color: #94a3b8; text-align: center;">
+            ScanToPrint • Support: <a href="mailto:${senderEmail}" style="color: #6366f1; text-decoration: none;">${senderEmail}</a>
           </div>
         </div>
       </body>
       </html>
     `;
 
-    // Send via Direct Brevo REST API
     const brevoResponse = await fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
       headers: {
@@ -85,10 +75,10 @@ export async function POST(req: Request) {
         'api-key': process.env.BREVO_API_KEY || '',
       },
       body: JSON.stringify({
-        sender: { name: 'ScanToPrint Partners', email: senderEmail },
+        sender: { name: 'ScanToPrint', email: senderEmail },
         to: [{ email: cleanEmail, name: fullName }],
         replyTo: { email: senderEmail, name: 'ScanToPrint Support' },
-        subject: `Welcome to ScanToPrint Partner Program, ${fullName}`,
+        subject: `ScanToPrint Partner Account Details - ${fullName}`,
         textContent: plainText,
         htmlContent: htmlContent,
       }),
