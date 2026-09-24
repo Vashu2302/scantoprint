@@ -17,32 +17,50 @@ export async function POST(req: Request) {
 
     const cleanEmail = email.trim().toLowerCase();
 
-    // 1. Verify merchant existence
-    const { data: shop, error: shopError } = await supabase
+    // 1. Check in shops table first
+    const { data: shop } = await supabase
       .from('shops')
       .select('id, email, business_name, name')
       .eq('email', cleanEmail)
       .maybeSingle();
 
-    if (shopError || !shop) {
-      return NextResponse.json(
-        { error: 'No registered merchant account found with this email.' },
-        { status: 404 }
-      );
+    let userType: 'shop' | 'partner' = 'shop';
+    let userId = shop?.id;
+    let userName = shop?.business_name || shop?.name || 'Merchant Partner';
+
+    // 2. If not found in shops, check in partners table
+    if (!shop) {
+      const { data: partner } = await supabase
+        .from('partners')
+        .select('id, email, full_name')
+        .eq('email', cleanEmail)
+        .maybeSingle();
+
+      if (!partner) {
+        return NextResponse.json(
+          { error: 'No registered merchant or partner account found with this email.' },
+          { status: 404 }
+        );
+      }
+
+      userType = 'partner';
+      userId = partner.id;
+      userName = partner.full_name || 'Valued Partner';
     }
 
-    // 2. Generate 6-digit OTP
+    // 3. Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
-    // 3. Save OTP in database
+    // 4. Save OTP in respective table
+    const targetTable = userType === 'shop' ? 'shops' : 'partners';
     const { error: updateError } = await supabase
-      .from('shops')
+      .from(targetTable)
       .update({
         reset_otp: otp,
         reset_otp_expires_at: expiresAt,
       })
-      .eq('id', shop.id);
+      .eq('id', userId);
 
     if (updateError) {
       console.error('Supabase OTP error:', updateError);
@@ -52,7 +70,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 4. Secure Transporter
+    // 5. Send Email via Gmail Transporter
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 465,
@@ -63,9 +81,6 @@ export async function POST(req: Request) {
       },
     });
 
-    const merchantName = shop.business_name || shop.name || 'Merchant Partner';
-
-    // 5. Send Professional English OTP Email
     await transporter.sendMail({
       from: `"ScanToPrint Security" <${process.env.SUPPORT_EMAIL}>`,
       to: cleanEmail,
@@ -75,12 +90,12 @@ export async function POST(req: Request) {
           
           <div style="background: linear-gradient(135deg, #4f46e5 0%, #312e81 100%); padding: 32px 24px; text-align: center;">
             <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">ScanToPrint</h1>
-            <p style="color: #c7d2fe; margin: 6px 0 0 0; font-size: 13px;">Merchant Account Security</p>
+            <p style="color: #c7d2fe; margin: 6px 0 0 0; font-size: 13px;">${userType === 'partner' ? 'Partner Account Security' : 'Merchant Account Security'}</p>
           </div>
 
           <div style="padding: 32px 24px;">
             <p style="font-size: 15px; color: #e2e8f0; margin-top: 0;">
-              Hello <strong>${merchantName}</strong>,
+              Hello <strong>${userName}</strong>,
             </p>
             <p style="font-size: 14px; color: #94a3b8; line-height: 1.6; margin: 0 0 24px 0;">
               We received a request to reset your password. Use the verification code below to complete your password reset:

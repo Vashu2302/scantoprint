@@ -42,7 +42,7 @@ export default function PartnerLoginPage() {
       }
 
       if (!partner.is_active) {
-        throw new Error('Your partner account is suspended. Please contact admin.');
+        throw new Error('Your partner account is suspended. Please contact support.');
       }
 
       if (typeof window !== 'undefined') {
@@ -67,13 +67,28 @@ export default function PartnerLoginPage() {
             ScanToPrint<span className="text-indigo-400"> Partner</span>
           </span>
         </Link>
-        <h2 className="text-2xl font-black text-white pt-2">Partner Dashboard Login</h2>
+        <h2 className="text-2xl font-black text-white pt-2">Partner Portal Login</h2>
         <p className="text-xs text-slate-400">
-          Track your onboarded shops, commission earnings, and request UPI payouts.
+          Access your referral metrics, track active shop quotas, and manage direct UPI payouts.
         </p>
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4">
+      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4 space-y-4">
+        {/* Earnings Highlight Banner */}
+        <div className="bg-gradient-to-r from-indigo-950/60 via-[#0c1328] to-[#070b18] border border-indigo-500/30 rounded-2xl p-4 shadow-xl text-left space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+              <span>💰</span> Partner Earning Model
+            </span>
+            <span className="text-[10px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-mono">
+              Direct UPI Payouts
+            </span>
+          </div>
+          <p className="text-xs text-slate-300 leading-relaxed">
+            Earn <strong className="text-white">₹100</strong> per Standard and <strong className="text-amber-400">₹150</strong> per Premium store renewal. Onboarding 20-30 photocopy counters can generate <strong className="text-emerald-400">₹3,000 to ₹5,000+</strong> in regular recurring income every month!
+          </p>
+        </div>
+
         <div className="bg-[#0b1021] border border-slate-800/90 py-8 px-6 sm:px-8 rounded-3xl shadow-2xl space-y-6">
           {errorMsg && (
             <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs flex items-center gap-2">
@@ -91,7 +106,7 @@ export default function PartnerLoginPage() {
                 type="tel"
                 required
                 maxLength={10}
-                placeholder="10-digit mobile"
+                placeholder="10-digit mobile number"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 className="w-full bg-[#070b18] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-mono"
@@ -99,13 +114,21 @@ export default function PartnerLoginPage() {
             </div>
 
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                Password
-              </label>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  Password
+                </label>
+                <Link
+                  href="/forgot-password?role=partner"
+                  className="text-[11px] text-indigo-400 hover:text-indigo-300 hover:underline font-semibold"
+                >
+                  Forgot Password?
+                </Link>
+              </div>
               <input
                 type="password"
                 required
-                placeholder="Your password"
+                placeholder="Enter your password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full bg-[#070b18] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
@@ -117,7 +140,7 @@ export default function PartnerLoginPage() {
               disabled={loading}
               className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-indigo-600/30 cursor-pointer pt-3"
             >
-              {loading ? 'Verifying...' : 'Login to Dashboard →'}
+              {loading ? 'Authenticating...' : 'Login to Dashboard →'}
             </button>
           </form>
 

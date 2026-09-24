@@ -17,6 +17,7 @@ export default function PartnerRegisterPage() {
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [upiId, setUpiId] = useState('');
 
   const [loading, setLoading] = useState(false);
@@ -24,7 +25,7 @@ export default function PartnerRegisterPage() {
 
   const generateReferralCode = (name: string): string => {
     const cleanName = name.trim().replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 5) || 'STP';
-    const randomSuffix = Math.floor(100 + Math.random() * 900); // 3-digit random
+    const randomSuffix = Math.floor(100 + Math.random() * 900);
     return `${cleanName}${randomSuffix}`;
   };
 
@@ -32,7 +33,7 @@ export default function PartnerRegisterPage() {
     e.preventDefault();
     setErrorMsg('');
 
-    if (!fullName || !phone || !email || !password || !upiId) {
+    if (!fullName || !phone || !email || !password || !confirmPassword || !upiId) {
       setErrorMsg('Please fill in all required fields.');
       return;
     }
@@ -42,8 +43,18 @@ export default function PartnerRegisterPage() {
       return;
     }
 
+    if (password !== confirmPassword) {
+      setErrorMsg('Passwords do not match. Please verify your confirm password.');
+      return;
+    }
+
+    if (password.length < 6) {
+      setErrorMsg('Password must be at least 6 characters long.');
+      return;
+    }
+
     if (!upiId.includes('@')) {
-      setErrorMsg('Please enter a valid UPI ID (e.g. yourname@okaxis / number@paytm).');
+      setErrorMsg('Please enter a valid UPI ID (e.g. 9876543210@paytm or name@okaxis).');
       return;
     }
 
@@ -102,7 +113,20 @@ export default function PartnerRegisterPage() {
 
       if (insertError) throw insertError;
 
-      // 4. Save Session locally and redirect to dashboard
+      // 4. Fire Background Welcome Greeting Email
+      fetch('/api/partner/welcome-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fullName: fullName.trim(),
+          email: email.trim().toLowerCase(),
+          phone: phone.trim(),
+          referralCode: uniqueCode,
+          upiId: upiId.trim(),
+        }),
+      }).catch((err) => console.warn('Welcome email error:', err));
+
+      // 5. Save Session locally and redirect to dashboard
       if (typeof window !== 'undefined') {
         localStorage.setItem('stp_partner_id', newPartner.id);
         localStorage.setItem('stp_partner_data', JSON.stringify(newPartner));
@@ -127,11 +151,44 @@ export default function PartnerRegisterPage() {
         </Link>
         <h2 className="text-2xl font-black text-white pt-2">Join Campus & Partner Network</h2>
         <p className="text-xs text-slate-400">
-          Onboard print shops, give them 20% OFF, and earn ₹100 - ₹150 instant cash per store.
+          Onboard print shops, offer them 20% discount, and earn direct recurring commissions.
         </p>
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4">
+      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4 space-y-4">
+        {/* Transparent Earnings & Opportunity Card */}
+        <div className="bg-gradient-to-r from-indigo-950/60 via-[#0c1328] to-[#070b18] border border-indigo-500/30 rounded-2xl p-4 shadow-xl text-left space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+              <span>🚀</span> Earning Potential Overview
+            </span>
+            <span className="text-[10px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-mono font-bold">
+              Direct UPI Payouts
+            </span>
+          </div>
+
+          <p className="text-xs text-slate-300 leading-relaxed">
+            Every time a shopkeeper subscribes with your referral code, you earn instant commission:
+          </p>
+
+          <div className="grid grid-cols-2 gap-2 pt-1 font-mono text-xs">
+            <div className="bg-[#070b18] border border-slate-800 p-2.5 rounded-xl">
+              <span className="text-[10px] text-slate-400 uppercase block">Standard Plan</span>
+              <span className="text-base font-black text-indigo-400">₹100</span>
+              <span className="text-[10px] text-slate-500 block">per store</span>
+            </div>
+            <div className="bg-[#070b18] border border-slate-800 p-2.5 rounded-xl">
+              <span className="text-[10px] text-slate-400 uppercase block">Premium Plan</span>
+              <span className="text-base font-black text-amber-400">₹150</span>
+              <span className="text-[10px] text-slate-500 block">per store</span>
+            </div>
+          </div>
+
+          <p className="text-[11px] text-slate-400 pt-1">
+            💡 Onboarding just 30 active local shops can deliver <strong className="text-white">₹3,000 – ₹4,500+ every month</strong> with zero recurring effort!
+          </p>
+        </div>
+
         <div className="bg-[#0b1021] border border-slate-800/90 py-8 px-6 sm:px-8 rounded-3xl shadow-2xl space-y-6">
           {errorMsg && (
             <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs flex items-center gap-2">
@@ -155,22 +212,22 @@ export default function PartnerRegisterPage() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                  Mobile (User ID)
-                </label>
-                <input
-                  type="tel"
-                  required
-                  maxLength={10}
-                  placeholder="10-digit number"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="w-full bg-[#070b18] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-mono"
-                />
-              </div>
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                Mobile Number (Username)
+              </label>
+              <input
+                type="tel"
+                required
+                maxLength={10}
+                placeholder="10-digit mobile number"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="w-full bg-[#070b18] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-mono"
+              />
+            </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
                   Password
@@ -178,13 +235,37 @@ export default function PartnerRegisterPage() {
                 <input
                   type="password"
                   required
-                  placeholder="Set Password"
+                  placeholder="Set password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full bg-[#070b18] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
                 />
               </div>
+
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  Confirm Password
+                </label>
+                <input
+                  type="password"
+                  required
+                  placeholder="Re-enter password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className={`w-full bg-[#070b18] border rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none ${
+                    confirmPassword && password !== confirmPassword
+                      ? 'border-rose-500/70 focus:border-rose-500'
+                      : 'border-slate-800 focus:border-indigo-500'
+                  }`}
+                />
+              </div>
             </div>
+
+            {confirmPassword && password !== confirmPassword && (
+              <p className="text-[11px] text-rose-400 font-semibold">
+                Passwords do not match.
+              </p>
+            )}
 
             <div>
               <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
@@ -213,7 +294,7 @@ export default function PartnerRegisterPage() {
                 className="w-full bg-[#070b18] border border-emerald-500/40 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-400 font-mono"
               />
               <p className="text-[10px] text-slate-500 mt-1">
-                Your commission will be sent directly to this UPI address on payout request.
+                All referral earnings will be transferred directly to this UPI address on settlement request.
               </p>
             </div>
 
