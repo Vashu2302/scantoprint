@@ -17,7 +17,7 @@ export async function POST(req: Request) {
 
     const cleanEmail = email.trim().toLowerCase();
 
-    // 1. Check in shops table first
+    // 1. Check inside shops table first
     const { data: shop } = await supabase
       .from('shops')
       .select('id, email, business_name, name')
@@ -28,7 +28,7 @@ export async function POST(req: Request) {
     let userId = shop?.id;
     let userName = shop?.business_name || shop?.name || 'Merchant Partner';
 
-    // 2. If not found in shops, check in partners table
+    // 2. If no be shop, check inside partners table
     if (!shop) {
       const { data: partner } = await supabase
         .from('partners')
@@ -52,7 +52,7 @@ export async function POST(req: Request) {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
-    // 4. Save OTP in respective table
+    // 4. Save OTP inside database
     const targetTable = userType === 'shop' ? 'shops' : 'partners';
     const { error: updateError } = await supabase
       .from(targetTable)
@@ -70,7 +70,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 5. Send Email via Gmail Transporter
+    // 5. Setup nodemailer transporter
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 465,
@@ -83,12 +83,19 @@ export async function POST(req: Request) {
 
     const accountTypeLabel = userType === 'partner' ? 'Partner Account' : 'Merchant Account';
 
-    // Send high-deliverability clean email with plain text fallback
+    // Send email wit correct anti-spam headers
     await transporter.sendMail({
       from: `"ScanToPrint" <${process.env.SUPPORT_EMAIL}>`,
       to: cleanEmail,
+      replyTo: process.env.SUPPORT_EMAIL,
       subject: `ScanToPrint verification code: ${otp}`,
-      text: `Hello ${userName},\n\nYour password reset verification code is: ${otp}\n\nThis code is valid for 10 minutes.\n\nIf you did not request a password reset, please disregard this message.\n\nScanToPrint Support\nscantoprint.support@gmail.com`,
+      headers: {
+        'X-Priority': '1',
+        'X-MSMail-Priority': 'High',
+        'Importance': 'High',
+        'X-Mailer': 'ScanToPrint Mailer',
+      },
+      text: `Hello ${userName},\n\nYour password reset verification code is: ${otp}\n\nThis code will expire in 10 minutes.\n\nIf you did not request this, please ignore this email.\n\nScanToPrint Support\n${process.env.SUPPORT_EMAIL}`,
       html: `
         <!DOCTYPE html>
         <html lang="en">
@@ -126,7 +133,7 @@ export async function POST(req: Request) {
             </p>
 
             <div style="border-top: 1px solid #f1f5f9; padding-top: 18px; font-size: 11px; color: #94a3b8; text-align: center; line-height: 1.5;">
-              ScanToPrint Platform • Support: <a href="mailto:scantoprint.support@gmail.com" style="color: #6366f1; text-decoration: none;">scantoprint.support@gmail.com</a>
+              ScanToPrint Platform • Support: <a href="mailto:${process.env.SUPPORT_EMAIL}" style="color: #6366f1; text-decoration: none;">${process.env.SUPPORT_EMAIL}</a>
             </div>
           </div>
         </body>

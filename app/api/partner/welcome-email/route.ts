@@ -21,13 +21,19 @@ export async function POST(req: Request) {
 
     const cleanEmail = email.trim().toLowerCase();
 
-    // Plain text version for spam prevention
-    const plainText = `Hello ${fullName},\n\nWelcome to the ScanToPrint Partner Program!\n\nYour Partner Details:\n- Referral Promo Code: ${referralCode}\n- Registered Phone (Login ID): ${phone}\n- Settlement UPI ID: ${upiId}\n\nEarning Structure:\n- ₹100 direct commission on Standard plan subscriptions\n- ₹150 direct commission on Premium plan subscriptions\n\nLogin to your partner dashboard: https://scantoprint.in/partner/login\n\nScanToPrint Support\nscantoprint.support@gmail.com`;
+    const plainText = `Hello ${fullName},\n\nWelcome to the ScanToPrint Partner Program!\n\nYour Partner Details:\n- Referral Promo Code: ${referralCode}\n- Registered Phone (Login ID): ${phone}\n- Settlement UPI ID: ${upiId}\n\nEarning Structure:\n- ₹100 direct commission on Standard plan subscriptions\n- ₹150 direct commission on Premium plan subscriptions\n\nLogin to your partner dashboard: https://scantoprint.in/partner/login\n\nScanToPrint Support\n${process.env.SUPPORT_EMAIL}`;
 
     await transporter.sendMail({
       from: `"ScanToPrint" <${process.env.SUPPORT_EMAIL}>`,
       to: cleanEmail,
+      replyTo: process.env.SUPPORT_EMAIL,
       subject: `Welcome to ScanToPrint Partner Program, ${fullName}`,
+      headers: {
+        'X-Priority': '1',
+        'X-MSMail-Priority': 'High',
+        'Importance': 'High',
+        'X-Mailer': 'ScanToPrint Mailer',
+      },
       text: plainText,
       html: `
         <!DOCTYPE html>
@@ -85,7 +91,7 @@ export async function POST(req: Request) {
             </div>
 
             <div style="border-top: 1px solid #f1f5f9; padding-top: 18px; font-size: 11px; color: #94a3b8; text-align: center; line-height: 1.5;">
-              ScanToPrint Partner Support • <a href="mailto:scantoprint.support@gmail.com" style="color: #6366f1; text-decoration: none;">scantoprint.support@gmail.com</a>
+              ScanToPrint Partner Support • <a href="mailto:${process.env.SUPPORT_EMAIL}" style="color: #6366f1; text-decoration: none;">${process.env.SUPPORT_EMAIL}</a>
             </div>
           </div>
         </body>
