@@ -217,14 +217,17 @@ export default function AdminSuperDashboard() {
 
     const isPrem = String(shop.plan_type).toLowerCase() === 'premium';
     const basePrice = isPrem ? 249 : 149;
-    const hasDiscount = Boolean(shop.pending_promo_code || shop.referred_by_code || (shop.paid_amount && shop.paid_amount < basePrice));
-    const defaultAmount = isTopup ? 50 : (hasDiscount ? (isPrem ? 199 : 119) : basePrice);
-    const expectedAmount = Number(shop.paid_amount || shop.pending_action_amount || defaultAmount);
+    const appliedPromo = shop.referred_by_code || shop.pending_promo_code || shop.applied_promo_code;
+    const hasDiscount = Boolean(appliedPromo && String(appliedPromo).trim() !== '');
+    
+    // Exact Discounted calculation
+    const expectedAmount = isTopup 
+      ? 50 
+      : (hasDiscount ? (isPrem ? 199 : 119) : (Number(shop.paid_amount || shop.pending_action_amount || basePrice)));
 
-    const promoApplied = shop.pending_promo_code || shop.referred_by_code || shop.applied_promo_code;
     const confirmPrompt = isTopup
       ? `Confirm TOP-UP payment of ₹${expectedAmount} for "${shop.business_name || shop.name}"?\n\nThis will add +${topupPages} pages to their quota WITHOUT altering validity days.`
-      : `Confirm PLAN RENEWAL payment of ₹${expectedAmount}${promoApplied ? ` (Promo: ${promoApplied})` : ''} for "${shop.business_name || shop.name}"?\n\nThis will activate their 28-day plan.`;
+      : `Confirm PLAN RENEWAL payment of ₹${expectedAmount}${hasDiscount ? ` (Partner/Promo: ${appliedPromo} - 20% OFF)` : ''} for "${shop.business_name || shop.name}"?\n\nThis will activate their 28-day plan.`;
 
     if (!confirm(confirmPrompt)) return;
 
@@ -513,8 +516,9 @@ export default function AdminSuperDashboard() {
 
   shops.forEach((s) => {
     const p = (s.plan_type || 'trial').toLowerCase();
-    const actualPaid = Number(s.paid_amount || s.subscription_paid_amount || s.pending_action_amount);
-    const cost = actualPaid > 0 ? actualPaid : getShopPlanCost(p, s.billing_cycle, Boolean(s.referred_by_code || s.pending_promo_code));
+    const hasDiscount = Boolean(s.referred_by_code || s.pending_promo_code);
+    const actualPaid = Number(s.paid_amount || s.subscription_paid_amount || (hasDiscount ? (p === 'premium' ? 199 : 119) : 0));
+    const cost = actualPaid > 0 ? actualPaid : getShopPlanCost(p, s.billing_cycle, hasDiscount);
 
     if (cost > 0 && (s.payment_utr || s.payment_verified)) {
       lifetimeSaaSFees += cost;
@@ -684,7 +688,7 @@ export default function AdminSuperDashboard() {
           </div>
         )}
 
-        {/* 2. PENDING SHOP UTR ALERT BOX WITH ACCURATE DISCOUNTED AMOUNT */}
+        {/* 2. PENDING SHOP UTR ALERT BOX WITH STRICT 20% DISCOUNT FOR PROMO / PARTNER */}
         {pendingUtrShops.length > 0 && (
           <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-5 shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
@@ -708,20 +712,20 @@ export default function AdminSuperDashboard() {
                 // Original Plan Price
                 const baseCatalogPrice = isTopup ? 50 : (isPrem ? 249 : 149);
 
-                // Check promo code presence
-                const appliedPromo = ps.pending_promo_code || ps.referred_by_code || ps.applied_promo_code;
-                const hasDiscount = Boolean(appliedPromo);
+                // Priority: Any referral or promo code triggers FLAT 20% OFF
+                const appliedPromo = ps.referred_by_code || ps.pending_promo_code || ps.applied_promo_code;
+                const hasDiscount = Boolean(appliedPromo && String(appliedPromo).trim() !== '');
 
-                // Exact Amount Paid (Calculates 20% OFF if promo exists)
+                // Calculate actual paid price: 149 -> 119, 249 -> 199
                 let actualPaidPrice = baseCatalogPrice;
                 if (isTopup) {
                   actualPaidPrice = 50;
+                } else if (hasDiscount) {
+                  actualPaidPrice = isPrem ? 199 : 119;
                 } else if (ps.paid_amount && Number(ps.paid_amount) > 0) {
                   actualPaidPrice = Number(ps.paid_amount);
                 } else if (ps.pending_action_amount && Number(ps.pending_action_amount) > 0) {
                   actualPaidPrice = Number(ps.pending_action_amount);
-                } else if (hasDiscount) {
-                  actualPaidPrice = isPrem ? 199 : 119;
                 }
 
                 return (
@@ -732,7 +736,7 @@ export default function AdminSuperDashboard() {
                         <p className="text-[10px] text-slate-400">{ps.owner_name} • {ps.phone}</p>
                         {appliedPromo && (
                           <p className="text-[10px] text-indigo-400 font-mono mt-0.5">
-                            Promo / Partner: {appliedPromo}
+                            Partner Code: {appliedPromo}
                           </p>
                         )}
                       </div>
@@ -748,7 +752,7 @@ export default function AdminSuperDashboard() {
                         </span>
                         
                         <div className="flex items-center justify-end gap-1.5 pt-0.5">
-                          {hasDiscount && actualPaidPrice < baseCatalogPrice && (
+                          {hasDiscount && (
                             <span className="text-[11px] line-through text-slate-500 font-mono">
                               ₹{baseCatalogPrice}
                             </span>
@@ -761,7 +765,7 @@ export default function AdminSuperDashboard() {
                         {hasDiscount && (
                           <div className="mt-1">
                             <span className="inline-flex items-center gap-1 text-[9px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded">
-                              🏷️ {appliedPromo} (20% OFF)
+                              🏷️ 20% OFF Applied
                             </span>
                           </div>
                         )}
