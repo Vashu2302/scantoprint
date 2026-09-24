@@ -209,16 +209,21 @@ export default function AdminSuperDashboard() {
     }
   };
 
-  // SMART APPROVAL: Handles Quota Top-Up (Pages Only) vs Plan Renewal (+28 Days)
+  // SMART APPROVAL: Handles Quota Top-Up vs Plan Renewal with exact paid amount
   const handleApproveUtr = async (shop: any) => {
     const actionType = shop.pending_action_type || 'plan_renew';
     const isTopup = actionType === 'quota_topup';
     const topupPages = Number(shop.pending_action_pages || 100);
-    const expectedAmount = Number(shop.pending_action_amount || (isTopup ? 50 : 149));
 
-    const promoApplied = shop.applied_promo_code || shop.pending_promo_code;
+    const isPrem = String(shop.plan_type).toLowerCase() === 'premium';
+    const basePrice = isPrem ? 249 : 149;
+    const hasDiscount = Boolean(shop.pending_promo_code || shop.referred_by_code || (shop.paid_amount && shop.paid_amount < basePrice));
+    const defaultAmount = isTopup ? 50 : (hasDiscount ? (isPrem ? 199 : 119) : basePrice);
+    const expectedAmount = Number(shop.paid_amount || shop.pending_action_amount || defaultAmount);
+
+    const promoApplied = shop.pending_promo_code || shop.referred_by_code || shop.applied_promo_code;
     const confirmPrompt = isTopup
-      ? `Confirm TOP-UP payment of ₹${expectedAmount} for "${shop.business_name || shop.name}"?\n\nThis will add +${topupPages} pages to their quota WITHOUT altering their validity days.`
+      ? `Confirm TOP-UP payment of ₹${expectedAmount} for "${shop.business_name || shop.name}"?\n\nThis will add +${topupPages} pages to their quota WITHOUT altering validity days.`
       : `Confirm PLAN RENEWAL payment of ₹${expectedAmount}${promoApplied ? ` (Promo: ${promoApplied})` : ''} for "${shop.business_name || shop.name}"?\n\nThis will activate their 28-day plan.`;
 
     if (!confirm(confirmPrompt)) return;
@@ -228,6 +233,7 @@ export default function AdminSuperDashboard() {
       subscription_status: 'active',
       is_paused: false,
       payment_utr: shop.payment_utr,
+      paid_amount: expectedAmount,
       pending_action_type: null,
       pending_action_pages: null,
       pending_action_amount: null,
@@ -308,8 +314,8 @@ export default function AdminSuperDashboard() {
 
     alert(
       isTopup
-        ? `✓ Top-up Approved! +${topupPages} pages added to "${shop.business_name || shop.name}". Days remaining untouched.`
-        : `✓ Plan Approved! Validity active for 28 days for "${shop.business_name || shop.name}".`
+        ? `✓ Top-up Approved! +${topupPages} pages added to "${shop.business_name || shop.name}".`
+        : `✓ Plan Approved! ₹${expectedAmount} confirmed for "${shop.business_name || shop.name}".`
     );
   };
 
@@ -507,8 +513,8 @@ export default function AdminSuperDashboard() {
 
   shops.forEach((s) => {
     const p = (s.plan_type || 'trial').toLowerCase();
-    const actualPaid = Number(s.subscription_paid_amount || s.pending_action_amount);
-    const cost = actualPaid > 0 ? actualPaid : getShopPlanCost(p, s.billing_cycle, Boolean(s.referred_by_code));
+    const actualPaid = Number(s.paid_amount || s.subscription_paid_amount || s.pending_action_amount);
+    const cost = actualPaid > 0 ? actualPaid : getShopPlanCost(p, s.billing_cycle, Boolean(s.referred_by_code || s.pending_promo_code));
 
     if (cost > 0 && (s.payment_utr || s.payment_verified)) {
       lifetimeSaaSFees += cost;
@@ -564,6 +570,7 @@ export default function AdminSuperDashboard() {
       s.phone?.includes(searchQuery) ||
       s.payment_utr?.includes(searchQuery) ||
       s.referred_by_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.pending_promo_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.applied_promo_code?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -677,7 +684,7 @@ export default function AdminSuperDashboard() {
           </div>
         )}
 
-        {/* 2. PENDING SHOP UTR ALERT BOX WITH PROMO & ACTUAL PAID AMOUNT */}
+        {/* 2. PENDING SHOP UTR ALERT BOX WITH ACCURATE DISCOUNTED AMOUNT */}
         {pendingUtrShops.length > 0 && (
           <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-5 shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
@@ -688,7 +695,7 @@ export default function AdminSuperDashboard() {
                 </h2>
               </div>
               <span className="text-[11px] text-amber-200/70 font-sans">
-                Check exact amount and UTR in your PhonePe / GPay statement.
+                Verify exact received amount in your Bank / UPI statement before approving.
               </span>
             </div>
 
@@ -696,17 +703,26 @@ export default function AdminSuperDashboard() {
               {pendingUtrShops.map((ps) => {
                 const isTopup = ps.pending_action_type === 'quota_topup';
                 const topupPages = ps.pending_action_pages || 100;
+                const isPrem = String(ps.plan_type).toLowerCase() === 'premium';
                 
-                // Original Catalog Price
-                const baseCatalogPrice = isTopup ? 50 : (ps.plan_type === 'premium' ? 249 : 149);
+                // Original Plan Price
+                const baseCatalogPrice = isTopup ? 50 : (isPrem ? 249 : 149);
 
-                // Exact Amount Paid by Customer (from checkout or fallback)
-                const actualPaidPrice = ps.pending_action_amount 
-                  ? Number(ps.pending_action_amount)
-                  : (ps.subscription_paid_amount ? Number(ps.subscription_paid_amount) : baseCatalogPrice);
+                // Check promo code presence
+                const appliedPromo = ps.pending_promo_code || ps.referred_by_code || ps.applied_promo_code;
+                const hasDiscount = Boolean(appliedPromo);
 
-                // Check Promo Code
-                const appliedPromo = ps.applied_promo_code || ps.pending_promo_code || (actualPaidPrice < baseCatalogPrice ? '20% OFF' : null);
+                // Exact Amount Paid (Calculates 20% OFF if promo exists)
+                let actualPaidPrice = baseCatalogPrice;
+                if (isTopup) {
+                  actualPaidPrice = 50;
+                } else if (ps.paid_amount && Number(ps.paid_amount) > 0) {
+                  actualPaidPrice = Number(ps.paid_amount);
+                } else if (ps.pending_action_amount && Number(ps.pending_action_amount) > 0) {
+                  actualPaidPrice = Number(ps.pending_action_amount);
+                } else if (hasDiscount) {
+                  actualPaidPrice = isPrem ? 199 : 119;
+                }
 
                 return (
                   <div key={ps.id} className="bg-[#070b18] border border-slate-800 rounded-xl p-4 space-y-3 relative overflow-hidden">
@@ -714,9 +730,9 @@ export default function AdminSuperDashboard() {
                       <div>
                         <h3 className="font-bold text-white text-xs">{ps.business_name || ps.name}</h3>
                         <p className="text-[10px] text-slate-400">{ps.owner_name} • {ps.phone}</p>
-                        {ps.referred_by_code && (
+                        {appliedPromo && (
                           <p className="text-[10px] text-indigo-400 font-mono mt-0.5">
-                            Partner Code: {ps.referred_by_code}
+                            Promo / Partner: {appliedPromo}
                           </p>
                         )}
                       </div>
@@ -732,7 +748,7 @@ export default function AdminSuperDashboard() {
                         </span>
                         
                         <div className="flex items-center justify-end gap-1.5 pt-0.5">
-                          {appliedPromo && actualPaidPrice < baseCatalogPrice && (
+                          {hasDiscount && actualPaidPrice < baseCatalogPrice && (
                             <span className="text-[11px] line-through text-slate-500 font-mono">
                               ₹{baseCatalogPrice}
                             </span>
@@ -742,10 +758,10 @@ export default function AdminSuperDashboard() {
                           </div>
                         </div>
 
-                        {appliedPromo && (
+                        {hasDiscount && (
                           <div className="mt-1">
                             <span className="inline-flex items-center gap-1 text-[9px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded">
-                              🏷️ Promo: {appliedPromo}
+                              🏷️ {appliedPromo} (20% OFF)
                             </span>
                           </div>
                         )}
@@ -782,7 +798,7 @@ export default function AdminSuperDashboard() {
                         onClick={() => handleApproveUtr(ps)}
                         className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] rounded-lg transition-all shadow cursor-pointer"
                       >
-                        {isTopup ? `✓ Approve (+${topupPages} Pgs)` : '✓ Approve (+28 Days)'}
+                        {isTopup ? `✓ Approve (+${topupPages} Pgs)` : `✓ Approve (₹${actualPaidPrice})`}
                       </button>
                       <button
                         onClick={() => handleRejectUtr(ps)}
