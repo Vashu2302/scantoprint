@@ -81,44 +81,56 @@ export async function POST(req: Request) {
       },
     });
 
-    await transporter.sendMail({
-      from: `"ScanToPrint Security" <${process.env.SUPPORT_EMAIL}>`,
-      to: cleanEmail,
-      subject: `${otp} is your verification code • ScanToPrint`,
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 520px; margin: 0 auto; background-color: #0b1021; color: #f8fafc; border-radius: 16px; overflow: hidden; border: 1px solid #1e293b;">
-          
-          <div style="background: linear-gradient(135deg, #4f46e5 0%, #312e81 100%); padding: 32px 24px; text-align: center;">
-            <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">ScanToPrint</h1>
-            <p style="color: #c7d2fe; margin: 6px 0 0 0; font-size: 13px;">${userType === 'partner' ? 'Partner Account Security' : 'Merchant Account Security'}</p>
-          </div>
+    const accountTypeLabel = userType === 'partner' ? 'Partner Account' : 'Merchant Account';
 
-          <div style="padding: 32px 24px;">
-            <p style="font-size: 15px; color: #e2e8f0; margin-top: 0;">
+    // Send high-deliverability clean email with plain text fallback
+    await transporter.sendMail({
+      from: `"ScanToPrint" <${process.env.SUPPORT_EMAIL}>`,
+      to: cleanEmail,
+      subject: `ScanToPrint verification code: ${otp}`,
+      text: `Hello ${userName},\n\nYour password reset verification code is: ${otp}\n\nThis code is valid for 10 minutes.\n\nIf you did not request a password reset, please disregard this message.\n\nScanToPrint Support\nscantoprint.support@gmail.com`,
+      html: `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Verification Code</title>
+        </head>
+        <body style="margin: 0; padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; color: #1e293b;">
+          <div style="max-width: 480px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 32px 24px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+            
+            <div style="margin-bottom: 24px;">
+              <h2 style="margin: 0; color: #4338ca; font-size: 20px; font-weight: 800; letter-spacing: -0.5px;">ScanToPrint</h2>
+              <span style="font-size: 12px; color: #64748b;">${accountTypeLabel} Verification</span>
+            </div>
+
+            <p style="font-size: 14px; line-height: 1.6; margin: 0 0 16px 0; color: #334155;">
               Hello <strong>${userName}</strong>,
             </p>
-            <p style="font-size: 14px; color: #94a3b8; line-height: 1.6; margin: 0 0 24px 0;">
-              We received a request to reset your password. Use the verification code below to complete your password reset:
+            <p style="font-size: 14px; line-height: 1.6; margin: 0 0 24px 0; color: #475569;">
+              We received a request to reset your password. Use the verification code below to proceed:
             </p>
 
-            <div style="text-align: center; background-color: #070b18; border: 1px dashed #6366f1; border-radius: 12px; padding: 20px 16px; margin: 24px 0;">
-              <span style="font-size: 34px; font-weight: 800; letter-spacing: 8px; color: #38bdf8; font-family: 'Courier New', Courier, monospace; display: block;">
+            <div style="background-color: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 8px; padding: 18px; text-align: center; margin: 24px 0;">
+              <span style="font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #0f172a; display: block;">
                 ${otp}
               </span>
-              <span style="font-size: 12px; color: #64748b; margin-top: 8px; display: block;">
+              <span style="display: block; font-size: 11px; color: #64748b; margin-top: 6px; font-weight: 500;">
                 Valid for 10 minutes only
               </span>
             </div>
 
-            <p style="font-size: 13px; color: #94a3b8; line-height: 1.6;">
-              If you did not make this request, you can safely ignore this email. Your account remains completely secure.
+            <p style="font-size: 13px; line-height: 1.5; color: #64748b; margin: 0 0 24px 0;">
+              If you did not request this verification code, you can safely ignore this email.
             </p>
 
-            <div style="margin-top: 32px; padding-top: 20px; border-top: 1px solid #1e293b; font-size: 12px; color: #64748b; text-align: center;">
-              Need help? Reach us anytime at <a href="mailto:scantoprint.support@gmail.com" style="color: #818cf8; text-decoration: none;">scantoprint.support@gmail.com</a>
+            <div style="border-top: 1px solid #f1f5f9; padding-top: 18px; font-size: 11px; color: #94a3b8; text-align: center; line-height: 1.5;">
+              ScanToPrint Platform • Support: <a href="mailto:scantoprint.support@gmail.com" style="color: #6366f1; text-decoration: none;">scantoprint.support@gmail.com</a>
             </div>
           </div>
-        </div>
+        </body>
+        </html>
       `,
     });
 
