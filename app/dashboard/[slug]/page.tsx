@@ -32,7 +32,7 @@ export default function VashuExactMerchantDashboard() {
   const [tourStep, setTourStep] = useState<number>(1);
   const [anchorRect, setAnchorRect] = useState<TourAnchorRect | null>(null);
 
-  // String-based pricing state to allow smooth decimals (e.g., 1.5, 2.5) without zero-locking
+  // String-based pricing state: supports smooth decimals like 1.5, 2.5 without zero-lock
   const [pricing, setPricing] = useState({
     bwSingle: '2',
     bwDouble: '3',
@@ -148,8 +148,8 @@ export default function VashuExactMerchantDashboard() {
       if (shopData) {
         setShop(shopData);
         setNewUpiId(shopData.upi_id || '');
-        
-        // Only initialize pricing on initial load or if not actively editing
+
+        // Sirf initial load par update karein taaki user jab rate likh raha ho toh override na ho
         if (!isSilent) {
           setPricing({
             bwSingle: String(shopData.bw_single ?? '2'),
@@ -222,7 +222,7 @@ export default function VashuExactMerchantDashboard() {
 
   const handleRequestSaveUpi = () => {
     if (!newUpiId.trim() || !newUpiId.includes('@')) {
-      alert('Please enter a valid UPI ID (e.g. name@okhdfcbank or 9826xxxxxx@ybl).');
+      alert('Kripya valid UPI ID enter karein (e.g. name@okhdfcbank ya 9826xxxxxx@ybl).');
       return;
     }
     setIsEditUpiOpen(false);
@@ -232,36 +232,47 @@ export default function VashuExactMerchantDashboard() {
     setSecurityModalOpen(true);
   };
 
+  // SECURE BACKEND API COMMIT: Row Level Security block ko bypass karke 100% save karega
   const handleVerifyAndCommit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!shop) return;
-
-    if (securityPassword.trim() !== String(shop.plain_password).trim()) {
-      setSecurityError('Incorrect store password! Security check failed.');
-      return;
-    }
 
     setSavingSecuredData(true);
     setSecurityError('');
 
     try {
+      const payloadData =
+        securityAction === 'save_rates'
+          ? {
+              bwSingle: pricing.bwSingle,
+              bwDouble: pricing.bwDouble,
+              colorSingle: pricing.colorSingle,
+              colorDouble: pricing.colorDouble,
+            }
+          : { upiId: newUpiId.trim() };
+
+      const res = await fetch('/api/shops/update-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shopId: shop.id,
+          password: securityPassword,
+          action: securityAction,
+          payload: payloadData,
+        }),
+      });
+
+      const resData = await res.json();
+
+      if (!res.ok) {
+        throw new Error(resData.message || 'Verification fail ho gaya');
+      }
+
       if (securityAction === 'save_rates') {
         const parsedBwSingle = parseFloat(pricing.bwSingle) || 0;
         const parsedBwDouble = parseFloat(pricing.bwDouble) || 0;
         const parsedColorSingle = parseFloat(pricing.colorSingle) || 0;
         const parsedColorDouble = parseFloat(pricing.colorDouble) || 0;
-
-        const { error } = await supabase
-          .from('shops')
-          .update({
-            bw_single: parsedBwSingle,
-            bw_double: parsedBwDouble,
-            color_single: parsedColorSingle,
-            color_double: parsedColorDouble,
-          })
-          .eq('id', shop.id);
-
-        if (error) throw error;
 
         setShop((prev: any) => ({
           ...prev,
@@ -271,31 +282,19 @@ export default function VashuExactMerchantDashboard() {
           color_double: parsedColorDouble,
         }));
 
-        setPricing({
-          bwSingle: String(parsedBwSingle),
-          bwDouble: String(parsedBwDouble),
-          colorSingle: String(parsedColorSingle),
-          colorDouble: String(parsedColorDouble),
-        });
-
         setRatesSaved(true);
         setTimeout(() => setRatesSaved(false), 3000);
       } else if (securityAction === 'save_upi') {
-        const { error } = await supabase
-          .from('shops')
-          .update({
-            upi_id: newUpiId.trim(),
-          })
-          .eq('id', shop.id);
-
-        if (error) throw error;
-        setShop({ ...shop, upi_id: newUpiId.trim() });
+        setShop((prev: any) => ({
+          ...prev,
+          upi_id: newUpiId.trim(),
+        }));
       }
 
       setSecurityModalOpen(false);
       setSecurityPassword('');
     } catch (err: any) {
-      setSecurityError('Failed to update: ' + err.message);
+      setSecurityError(err.message || 'Update failed. Dubara koshish karein.');
     } finally {
       setSavingSecuredData(false);
     }
@@ -370,8 +369,8 @@ export default function VashuExactMerchantDashboard() {
 
       setRenewSuccessMsg(
         modalMode === 'topup'
-          ? `✓ UTR submitted for +${selectedTopup.pages} Pages Top-Up! Admin approval will add quota without altering days.`
-          : `✓ UTR submitted for Plan Renewal! Admin approval will add +28 days without wasting remaining days.`
+          ? `✓ UTR submitted for +${selectedTopup.pages} Pages Top-Up! Admin approval quota add kar dega bina days kam kiye.`
+          : `✓ UTR submitted for Plan Renewal! Admin approval +28 days validity add karega.`
       );
 
       setTimeout(() => {
@@ -380,7 +379,7 @@ export default function VashuExactMerchantDashboard() {
         setRenewUtr('');
       }, 2500);
     } catch (err: any) {
-      setRenewErrorMsg(err.message || 'Failed to submit UTR. Try again.');
+      setRenewErrorMsg(err.message || 'UTR submit nahi ho paya. Dobara try karein.');
     } finally {
       setSubmittingRenew(false);
     }
@@ -1068,8 +1067,8 @@ export default function VashuExactMerchantDashboard() {
               </h3>
               <p className="text-[11px] text-slate-400">
                 {securityAction === 'save_rates'
-                  ? 'Enter your store password to confirm print rates change.'
-                  : 'Enter your store password to confirm customer UPI receiver change.'}
+                  ? 'Apne print rates confirm karne ke liye store password enter karein.'
+                  : 'Customer UPI receiver change karne ke liye store password enter karein.'}
               </p>
             </div>
 
@@ -1119,17 +1118,17 @@ export default function VashuExactMerchantDashboard() {
                 <span>Change UPI Receiver ID</span>
               </h3>
               <p className="text-[11px] text-slate-400">
-                Customer payments will land directly into this UPI account.
+                Customer payments direct aapke is UPI account mein transfer honge.
               </p>
             </div>
 
             <div className="space-y-1.5">
               <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                Your Personal / Store UPI ID
+                Aapka UPI ID
               </label>
               <input
                 type="text"
-                placeholder="e.g. yourname@okaxis or 9826xxxxxx@ybl"
+                placeholder="e.g. yourname@okaxis ya 9826xxxxxx@ybl"
                 value={newUpiId}
                 onChange={(e) => setNewUpiId(e.target.value)}
                 className="w-full bg-[#070b18] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-emerald-400 font-mono focus:outline-none focus:border-indigo-500"
@@ -1195,8 +1194,8 @@ export default function VashuExactMerchantDashboard() {
                 </h2>
                 <p className="text-[11px] text-slate-400">
                   {modalMode === 'topup'
-                    ? 'Top-up only adds pages. Your active validity days will NOT change.'
-                    : 'Plan renewal adds +28 Days to your remaining validity (no days are wasted).'}
+                    ? 'Top-up se sirf pages badhenge. Aapke active validity days change nahi honge.'
+                    : 'Plan renewal se bache hue dino ke upar +28 Days aur jud jayenge.'}
                 </p>
               </div>
             </div>
