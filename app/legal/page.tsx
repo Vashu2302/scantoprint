@@ -5,7 +5,7 @@ import Link from 'next/link';
 
 export default function LegalPage() {
   useEffect(() => {
-    document.title = 'Legal, Privacy Policy & Terms • ScanToPrint';
+    document.title = 'Legal, Privacy Policy, Terms & Refund Policy • ScanToPrint';
   }, []);
 
   return (
@@ -30,35 +30,35 @@ export default function LegalPage() {
       <main className="max-w-4xl mx-auto px-6 pt-12 space-y-10">
         <div className="space-y-2 border-b border-slate-800/80 pb-6">
           <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/20">
-            Official Compliance & Disclaimers
+            Official Compliance & Legal Standards
           </span>
           <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight pt-2">
-            Privacy Policy, Terms & Refund Terms
+            Privacy Policy, Terms & Refund Framework
           </h1>
           <p className="text-xs text-slate-400">
-            Effective Date: March 2026 • Governing Law: Republic of India
+            Last Updated: September 2026 • Platform: scantoprint.in • Governing Law: Republic of India
           </p>
         </div>
 
-        {/* 1. Privacy Policy */}
+        {/* 1. Privacy Policy & Auto File Deletion */}
         <section className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-6 sm:p-8 space-y-4 shadow-xl">
           <div className="flex items-center gap-3">
             <span className="text-xl">🔒</span>
-            <h2 className="text-lg font-bold text-white tracking-tight">1. Privacy Policy & Zero Data Retention</h2>
+            <h2 className="text-lg font-bold text-white tracking-tight">1. Privacy Policy & Automated File Purge</h2>
           </div>
-          <div className="text-xs text-slate-300 leading-relaxed space-y-3">
+          <div className="text-xs sm:text-sm text-slate-300 leading-relaxed space-y-3">
             <p>
-              ScanToPrint (<strong className="text-white">scantoprint.in</strong>) treats customer privacy and confidential documents with extreme security:
+              ScanToPrint (<strong className="text-white">scantoprint.in</strong>) operates with strict zero-knowledge document transmission standards:
             </p>
             <ul className="list-disc pl-5 space-y-2 text-slate-400">
               <li>
-                <strong className="text-slate-200">Zero Data Retention:</strong> All customer documents (PDFs, images, identity records) are stored temporarily solely for the purpose of transmitting them to the partner shop&apos;s physical printer spooler. Once the document is fed to the print queue, the cloud file is automatically wiped.
+                <strong className="text-slate-200">Instant File Deletion (Auto-Purge):</strong> All customer documents (PDFs, identity scans, images) uploaded through counter QR codes are stored only temporarily in encrypted storage solely to dispatch print commands to the physical desk printer. Once printing finishes or the job closes, files are automatically and permanently deleted from cloud servers.
               </li>
               <li>
-                <strong className="text-slate-200">No Content Inspection:</strong> We do not index, analyze, sell, or disclose the contents of any uploaded customer files.
+                <strong className="text-slate-200">Zero Content Inspection:</strong> We never read, index, profile, monetize, or share customer documents with any third-party advertising or analytics networks.
               </li>
               <li>
-                <strong className="text-slate-200">Payment Security:</strong> Customer UPI transactions are processed peer-to-peer directly between the customer and the shop owner&apos;s verified UPI handle. ScanToPrint does not hold, deduct, or escrow customer retail print funds.
+                <strong className="text-slate-200">Direct Merchant Settlements:</strong> Customer print charges are transferred peer-to-peer directly into the store owner&apos;s verified UPI ID. ScanToPrint does not hold, escrow, or deduct commission from customer retail print payments.
               </li>
             </ul>
           </div>
@@ -68,49 +68,77 @@ export default function LegalPage() {
         <section className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-6 sm:p-8 space-y-4 shadow-xl">
           <div className="flex items-center gap-3">
             <span className="text-xl">📜</span>
-            <h2 className="text-lg font-bold text-white tracking-tight">2. Terms of Service & Liability Disclaimer</h2>
+            <h2 className="text-lg font-bold text-white tracking-tight">2. Terms of Service & Platform Intermediary Role</h2>
           </div>
-          <div className="text-xs text-slate-300 leading-relaxed space-y-3">
+          <div className="text-xs sm:text-sm text-slate-300 leading-relaxed space-y-3">
             <p>
-              By accessing our web portal or using the desktop print agent, both merchant operators and retail customers agree to the following terms:
+              By accessing the portal, dashboard, or running the desktop spooler software, users and merchants agree to the following terms:
             </p>
             <ul className="list-disc pl-5 space-y-2 text-slate-400">
               <li>
-                <strong className="text-slate-200">Technology Intermediary Only:</strong> ScanToPrint functions purely as an automated spooling SaaS platform connecting local printers to a cloud queue. We are not a publisher, printer, or physical counter operator.
+                <strong className="text-slate-200">SaaS Technology Intermediary:</strong> ScanToPrint functions purely as an automated routing technology provider connecting browser upload queues to Windows printer spoolers. We do not operate physical printing counters.
               </li>
               <li>
-                <strong className="text-slate-200">Illegal & Forged Documents:</strong> Users are strictly prohibited from uploading counterfeit currency, forged official stamps, prohibited literature, or infringing copyrighted materials. The sole legal liability for printed materials lies with the individual customer and the registered shop owner.
+                <strong className="text-slate-200">Prohibited Documents & Compliance:</strong> Users must not upload forged credentials, counterfeit banknotes, prohibited materials, or copyright-infringing content. The user and the respective printing merchant bear full legal responsibility for document content.
               </li>
               <li>
-                <strong className="text-slate-200">Hardware Failures:</strong> ScanToPrint is not liable for shop-side printer paper jams, empty ink/toner cartridges, or local Windows power outages.
+                <strong className="text-slate-200">Hardware & On-Premise Disclaimer:</strong> ScanToPrint is not responsible for physical printer hardware jams, empty ink or toner cartridges, paper shortages, or local power and internet failures.
               </li>
             </ul>
           </div>
         </section>
 
-        {/* 3. Refund & Cancellation */}
+        {/* 3. Refund & Cancellation Policy */}
         <section className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-6 sm:p-8 space-y-4 shadow-xl">
           <div className="flex items-center gap-3">
             <span className="text-xl">💳</span>
-            <h2 className="text-lg font-bold text-white tracking-tight">3. Subscription & Refund Policy</h2>
+            <h2 className="text-lg font-bold text-white tracking-tight">3. Refund, Top-Up & Cancellation Policy</h2>
           </div>
-          <div className="text-xs text-slate-300 leading-relaxed space-y-3">
+          <div className="text-xs sm:text-sm text-slate-300 leading-relaxed space-y-3">
             <ul className="list-disc pl-5 space-y-2 text-slate-400">
               <li>
-                <strong className="text-slate-200">Free Trial:</strong> We offer a 7-day full access trial for print shops to test the hardware agent before paying any SaaS subscription fees.
+                <strong className="text-slate-200">Free Trial Testing:</strong> A 7-day full feature trial is provided so store owners can test print workflows and printer connections thoroughly before purchasing a subscription.
               </li>
               <li>
-                <strong className="text-slate-200">B2B SaaS Plans:</strong> Standard and Premium subscription fees (monthly or yearly) are non-refundable once activated, as server spooling resources and agent keys are provisioned immediately.
+                <strong className="text-slate-200">Strict Non-Refundable SaaS Policy:</strong> Once a subscription plan (Standard or Premium) or page quota top-up is activated via UTR verification, payments are strictly non-refundable. Because computing resources, agent API tokens, and server quotas activate instantly, refunds for change of mind or unused days cannot be issued.
               </li>
               <li>
-                <strong className="text-slate-200">Retail Print Disputes:</strong> Any retail payment disputes regarding photocopy quality, paper thickness, or failed prints must be resolved directly with the on-premise shopkeeper.
+                <strong className="text-slate-200">Cancellation & Expiry:</strong> Accounts do not auto-debit your bank. If you do not wish to continue, simply do not renew. Your subscription ends automatically without penalty or extra cancellation fees.
+              </li>
+              <li>
+                <strong className="text-slate-200">Payment Glitch Resolution:</strong> If money was deducted via UPI but your plan or quota top-up was not credited due to a network delay, send your 12-digit UTR and payment screenshot to our support desk. Quotas are reconciled and activated within 24 to 48 hours.
               </li>
             </ul>
           </div>
         </section>
 
-        <div className="text-center pt-6 border-t border-slate-800/80 text-xs text-slate-500">
-          Have legal questions or compliance inquiries? Reach out to scantoprint.support@gmail.com
+        {/* 4. Contact & Support Information */}
+        <section className="bg-[#0b1021] border border-slate-800/90 rounded-2xl p-6 sm:p-8 space-y-4 shadow-xl">
+          <div className="flex items-center gap-3">
+            <span className="text-xl">📞</span>
+            <h2 className="text-lg font-bold text-white tracking-tight">4. Contact & Grievance Support</h2>
+          </div>
+          <div className="text-xs sm:text-sm text-slate-300 leading-relaxed space-y-3">
+            <p>For technical support, billing inquiries, or legal clarifications, reach out directly:</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+              <div className="p-4 bg-[#070b18] border border-slate-800 rounded-xl space-y-1">
+                <span className="text-[10px] text-slate-400 uppercase font-mono block">Primary Support Email</span>
+                <a href="mailto:support@scantoprint.in" className="font-mono text-indigo-400 font-bold hover:underline block">
+                  support@scantoprint.in
+                </a>
+              </div>
+              <div className="p-4 bg-[#070b18] border border-slate-800 rounded-xl space-y-1">
+                <span className="text-[10px] text-slate-400 uppercase font-mono block">Backup Help Desk</span>
+                <a href="mailto:scantoprint.support@gmail.com" className="font-mono text-emerald-400 font-bold hover:underline block">
+                  scantoprint.support@gmail.com
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div className="text-center pt-4 text-xs text-slate-500 font-mono">
+          © 2026 ScanToPrint.in • Built for Fast, Secure Counter Printing
         </div>
       </main>
     </div>
