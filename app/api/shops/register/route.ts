@@ -88,6 +88,8 @@ export async function POST(req: Request) {
     const {
       ownerName,
       businessName,
+      address = '',
+      city = '',
       mobile,
       email,
       password,
@@ -143,9 +145,11 @@ export async function POST(req: Request) {
       .from('shops')
       .insert([
         {
-          name: businessName,
+          name: business_name, // Fixed reference
           business_name: businessName,
           owner_name: ownerName || '',
+          address: address.trim(),
+          city: city.trim(),
           phone: mobile,
           email: email || '',
           plain_password: password,

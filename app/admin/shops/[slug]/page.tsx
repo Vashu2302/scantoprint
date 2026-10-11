@@ -339,9 +339,7 @@ export default function ShopInspector360AdminPage() {
           </div>
         </div>
 
-        {/* ========================================================================= */}
-        {/* SUBSCRIPTION & PLAN MANAGEMENT CARD                                     */}
-        {/* ========================================================================= */}
+        {/* SUBSCRIPTION & PLAN MANAGEMENT CARD */}
         <div className="admin-no-print bg-[#0b1021] border border-indigo-500/30 rounded-3xl p-6 shadow-2xl space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
             <div className="flex items-center gap-2.5">
@@ -380,7 +378,6 @@ export default function ShopInspector360AdminPage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
-            {/* Plan Tier Selector */}
             <div className="space-y-1.5 bg-[#070b18] p-4 rounded-2xl border border-slate-800">
               <label className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
                 Select Subscription Tier
@@ -401,7 +398,6 @@ export default function ShopInspector360AdminPage() {
               </p>
             </div>
 
-            {/* +28 Days Buffer Buttons */}
             <div className="space-y-1.5 bg-[#070b18] p-4 rounded-2xl border border-slate-800 flex flex-col justify-between">
               <div>
                 <label className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
@@ -436,7 +432,6 @@ export default function ShopInspector360AdminPage() {
               </div>
             </div>
 
-            {/* Expiry Details & Action */}
             <div className="space-y-1.5 bg-[#070b18] p-4 rounded-2xl border border-slate-800 flex flex-col justify-between">
               <div>
                 <label className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
@@ -487,6 +482,17 @@ export default function ShopInspector360AdminPage() {
               <div className="bg-[#070b18] p-3.5 rounded-xl border border-slate-800">
                 <span className="text-slate-500 block text-[10px] uppercase font-bold">Login Phone ID</span>
                 <span className="text-white font-mono text-sm">{shop.phone}</span>
+              </div>
+
+              {/* Added Shop Address & City */}
+              <div className="bg-[#070b18] p-3.5 rounded-xl border border-slate-800">
+                <span className="text-slate-500 block text-[10px] uppercase font-bold">Shop Address</span>
+                <span className="text-white font-medium text-xs">{shop.address || 'Not Provided'}</span>
+              </div>
+
+              <div className="bg-[#070b18] p-3.5 rounded-xl border border-slate-800">
+                <span className="text-slate-500 block text-[10px] uppercase font-bold">City</span>
+                <span className="text-indigo-400 font-semibold text-xs">{shop.city || 'Not Provided'}</span>
               </div>
 
               <div className="bg-[#070b18] p-3.5 rounded-xl border border-slate-800">
@@ -704,9 +710,7 @@ export default function ShopInspector360AdminPage() {
 
       </div>
 
-      {/* ========================================================================= */}
-      {/* CONFIRMATION MODAL POPUP DIALOG                                          */}
-      {/* ========================================================================= */}
+      {/* CONFIRMATION MODAL POPUP DIALOG */}
       {showConfirmModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-[#0b1021] border border-slate-700 rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">

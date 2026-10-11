@@ -45,6 +45,8 @@ function RegisterMerchantForm() {
   const [form, setForm] = useState({
     ownerName: '',
     businessName: '',
+    address: '', // Added Address Field
+    city: '',    // Added City Field
     mobile: '',
     upiId: '',
     email: '',
@@ -199,6 +201,8 @@ function RegisterMerchantForm() {
         body: JSON.stringify({
           ownerName: form.ownerName,
           businessName: form.businessName,
+          address: form.address,       // Added to API payload
+          city: form.city,             // Added to API payload
           mobile: form.mobile,
           upiId: form.upiId,
           email: form.email,
@@ -542,6 +546,39 @@ function RegisterMerchantForm() {
                       type="text"
                       placeholder="Write your business name"
                       value={form.businessName}
+                      onChange={handleChange}
+                      className="w-full bg-[#070b18] border border-slate-800 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition-all"
+                    />
+                  </div>
+                </div>
+
+                {/* Added Address & City Fields */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-300">
+                      Shop Address <span className="text-indigo-400">*</span>
+                    </label>
+                    <input
+                      required
+                      name="address"
+                      type="text"
+                      placeholder="Street address, landmark..."
+                      value={form.address}
+                      onChange={handleChange}
+                      className="w-full bg-[#070b18] border border-slate-800 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition-all"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-300">
+                      City <span className="text-indigo-400">*</span>
+                    </label>
+                    <input
+                      required
+                      name="city"
+                      type="text"
+                      placeholder="Enter city name"
+                      value={form.city}
                       onChange={handleChange}
                       className="w-full bg-[#070b18] border border-slate-800 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition-all"
                     />
