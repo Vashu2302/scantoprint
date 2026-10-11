@@ -145,7 +145,7 @@ export async function POST(req: Request) {
       .from('shops')
       .insert([
         {
-          name: business_name, // Fixed reference
+          name: businessName, // Corrected from business_name
           business_name: businessName,
           owner_name: ownerName || '',
           address: address.trim(),

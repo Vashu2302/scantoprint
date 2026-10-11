@@ -45,8 +45,8 @@ function RegisterMerchantForm() {
   const [form, setForm] = useState({
     ownerName: '',
     businessName: '',
-    address: '', // Added Address Field
-    city: '',    // Added City Field
+    address: '', // Address Field Added
+    city: '',    // City Field Added
     mobile: '',
     upiId: '',
     email: '',
@@ -552,7 +552,7 @@ function RegisterMerchantForm() {
                   </div>
                 </div>
 
-                {/* Added Address & City Fields */}
+                {/* Shop Address & City Fields Added Here */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-300">
@@ -686,7 +686,7 @@ function RegisterMerchantForm() {
                   </div>
                 </div>
 
-                {/* Referral Code Field - ALWAYS VISIBLE IN ALL PLANS (INCLUDING TRIAL) */}
+                {/* Referral Code Field */}
                 <div className="bg-[#070b18] border border-slate-800 p-3.5 rounded-2xl space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="block text-[11px] font-bold uppercase tracking-wider text-indigo-300">
