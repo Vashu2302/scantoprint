@@ -70,7 +70,7 @@ export default function VashuExactMerchantDashboard() {
   useEffect(() => {
     if (shop) {
       const name = shop.business_name || shop.name || 'Store';
-      document.title = `${name} • Counter Dashboard | ScanToPrint`;
+      document.title = `${name} Counter Dashboard | ScanToPrint`;
 
       const welcomeDone = localStorage.getItem(`stp_welcome_done_${slug}`);
       if (!welcomeDone) {
@@ -407,7 +407,7 @@ export default function VashuExactMerchantDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#070b14] text-slate-100 flex items-center justify-center font-sans">
+      <div className="min-h-screen bg-[#070b18] text-slate-100 flex items-center justify-center font-sans">
         <div className="flex items-center gap-3">
           <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
           <span className="text-sm text-slate-400">Loading Store Dashboard...</span>
@@ -418,7 +418,7 @@ export default function VashuExactMerchantDashboard() {
 
   if (!shop) {
     return (
-      <div className="min-h-screen bg-[#070b14] text-slate-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-[#070b18] text-slate-100 flex items-center justify-center p-4">
         <div className="bg-[#0e1626] border border-slate-800 p-8 rounded-2xl text-center">
           <h2 className="text-xl font-bold text-rose-400">Shop Not Found</h2>
           <p className="text-xs text-slate-400 mt-2">Identifier: {slug}</p>
@@ -476,9 +476,17 @@ export default function VashuExactMerchantDashboard() {
     (o) => o.print_status !== 'completed' && o.print_status !== 'printed'
   ).length;
 
+  // --- REFERRAL & FIRST PAYMENT DISCOUNT LOGIC ---
+  const hasReferral = Boolean(shop?.referred_by || shop?.referral_code);
+  const isFirstPurchase = !shop?.plan_type || shop?.plan_type === 'trial';
+  const isReferralEligible = hasReferral && isFirstPurchase;
+
+  const standardPrice = isReferralEligible ? 119 : 149;
+  const premiumPrice = isReferralEligible ? 199 : 249;
+
   const payableAmount = modalMode === 'topup'
     ? selectedTopup.price
-    : selectedPlanTier === 'premium' ? 249 : 149;
+    : selectedPlanTier === 'premium' ? premiumPrice : standardPrice;
 
   const paymentNote = modalMode === 'topup'
     ? `STP TopUp ${selectedTopup.pages} Pages`
@@ -494,7 +502,8 @@ export default function VashuExactMerchantDashboard() {
   const arrowLeftOffset = anchorRect
     ? Math.max(20, Math.min(anchorRect.left + anchorRect.width / 2 - popupLeft, popupWidth - 20))
     : popupWidth / 2;
-    return (
+
+  return (
     <div className="min-h-screen bg-[#060813] text-slate-200 font-sans selection:bg-indigo-600 selection:text-white pb-16 relative">
       <style jsx global>{`
         @media print {
@@ -1197,6 +1206,12 @@ export default function VashuExactMerchantDashboard() {
                     ? 'Top-up se sirf pages badhenge. Aapke active validity days change nahi honge.'
                     : 'Plan renewal se bache hue dino ke upar +28 Days aur jud jayenge.'}
                 </p>
+                {modalMode === 'plan' && isReferralEligible && (
+                  <div className="mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-[10px] font-bold">
+                    <span>🎉</span>
+                    <span>Referral Applied: 20% OFF on your first plan!</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1253,8 +1268,18 @@ export default function VashuExactMerchantDashboard() {
                       : 'bg-[#070b18] border-slate-800 hover:border-slate-700'
                   }`}
                 >
-                  <span className="text-[10px] font-bold text-indigo-400 uppercase block">Standard</span>
-                  <div className="text-base font-black font-mono text-white">₹149</div>
+                  <div className="flex items-center justify-center gap-1.5">
+                    <span className="text-[10px] font-bold text-indigo-400 uppercase">Standard</span>
+                    {isReferralEligible && (
+                      <span className="text-[9px] font-bold bg-emerald-500/20 text-emerald-400 px-1 rounded border border-emerald-500/30">20% OFF</span>
+                    )}
+                  </div>
+                  <div className="text-base font-black font-mono text-white flex items-center justify-center gap-1.5">
+                    <span>₹{standardPrice}</span>
+                    {isReferralEligible && (
+                      <span className="text-xs text-slate-500 line-through font-normal">₹149</span>
+                    )}
+                  </div>
                   <p className="text-[9px] text-slate-400">500 Pgs + 28 Days Added</p>
                 </div>
 
@@ -1266,8 +1291,18 @@ export default function VashuExactMerchantDashboard() {
                       : 'bg-[#070b18] border-slate-800 hover:border-slate-700'
                   }`}
                 >
-                  <span className="text-[10px] font-bold text-amber-400 uppercase block">Premium</span>
-                  <div className="text-base font-black font-mono text-white">₹249</div>
+                  <div className="flex items-center justify-center gap-1.5">
+                    <span className="text-[10px] font-bold text-amber-400 uppercase">Premium</span>
+                    {isReferralEligible && (
+                      <span className="text-[9px] font-bold bg-emerald-500/20 text-emerald-400 px-1 rounded border border-emerald-500/30">20% OFF</span>
+                    )}
+                  </div>
+                  <div className="text-base font-black font-mono text-white flex items-center justify-center gap-1.5">
+                    <span>₹{premiumPrice}</span>
+                    {isReferralEligible && (
+                      <span className="text-xs text-slate-500 line-through font-normal">₹249</span>
+                    )}
+                  </div>
                   <p className="text-[9px] text-amber-300 font-bold">Unlimited + 28 Days</p>
                 </div>
               </div>
