@@ -209,15 +209,16 @@ export default function AdminSuperDashboard() {
     }
   };
 
-  // SMART APPROVAL: Handles Quota Top-Up vs Plan Renewal with exact paid amount
+  // SMART APPROVAL: Handles Quota Top-Up vs Plan Renewal with exact +28 days extension
   const handleApproveUtr = async (shop: any) => {
     const actionType = shop.pending_action_type || 'plan_renew';
     const isTopup = actionType === 'quota_topup';
     const topupPages = Number(shop.pending_action_pages || 100);
 
-    const isPrem = String(shop.plan_type).toLowerCase() === 'premium';
+    const targetPlan = (shop.pending_action_plan || shop.plan_type || 'standard').toLowerCase();
+    const isPrem = targetPlan === 'premium';
     const basePrice = isPrem ? 249 : 149;
-    const appliedPromo = shop.referred_by_code || shop.pending_promo_code || shop.applied_promo_code;
+    const appliedPromo = shop.referred_by_code || shop.referred_by || shop.pending_promo_code || shop.applied_promo_code;
     const hasDiscount = Boolean(appliedPromo && String(appliedPromo).trim() !== '');
     
     // Exact Discounted calculation
@@ -227,7 +228,7 @@ export default function AdminSuperDashboard() {
 
     const confirmPrompt = isTopup
       ? `Confirm TOP-UP payment of ₹${expectedAmount} for "${shop.business_name || shop.name}"?\n\nThis will add +${topupPages} pages to their quota WITHOUT altering validity days.`
-      : `Confirm PLAN RENEWAL payment of ₹${expectedAmount}${hasDiscount ? ` (Partner/Promo: ${appliedPromo} - 20% OFF)` : ''} for "${shop.business_name || shop.name}"?\n\nThis will activate their 28-day plan.`;
+      : `Confirm PLAN RENEWAL payment of ₹${expectedAmount}${hasDiscount ? ` (Partner/Promo: ${appliedPromo} - 20% OFF)` : ''} for "${shop.business_name || shop.name}"?\n\nThis will add +28 days to their subscription.`;
 
     if (!confirm(confirmPrompt)) return;
 
@@ -247,22 +248,14 @@ export default function AdminSuperDashboard() {
       const currentLimit = Number(shop.page_limit || 500);
       updatePayload.page_limit = currentLimit + topupPages;
     } else {
-      let newEndDate: Date;
-      if (!shop.payment_verified && shop.subscription_end) {
-        newEndDate = new Date(shop.subscription_end);
-      } else {
-        const currentEnd = shop.subscription_end ? new Date(shop.subscription_end) : new Date();
-        const baseDate = currentEnd.getTime() > Date.now() ? currentEnd : new Date();
-        newEndDate = new Date(baseDate.getTime() + 28 * 24 * 60 * 60 * 1000);
-      }
+      // FIX: Har bar +28 days jodna (purani bachi validity + 28 days)
+      const currentEnd = shop.subscription_end ? new Date(shop.subscription_end) : new Date();
+      const baseDate = currentEnd.getTime() > Date.now() ? currentEnd : new Date();
+      const newEndDate = new Date(baseDate.getTime() + 28 * 24 * 60 * 60 * 1000);
 
       updatePayload.subscription_end = newEndDate.toISOString();
-      if (shop.pending_action_plan) {
-        updatePayload.plan_type = shop.pending_action_plan;
-        if (shop.pending_action_plan === 'premium') {
-          updatePayload.page_limit = 999999;
-        }
-      }
+      updatePayload.plan_type = targetPlan;
+      updatePayload.page_limit = targetPlan === 'premium' ? 999999 : 500;
     }
 
     const { error } = await supabase
@@ -275,15 +268,15 @@ export default function AdminSuperDashboard() {
       return;
     }
 
-    if (shop.referred_by_code && !shop.commission_credited && !isTopup) {
-      const plan = (shop.plan_type || 'standard').toLowerCase();
-      const commission = plan === 'premium' ? 150 : 100;
+    const partnerCode = shop.referred_by_code || shop.referred_by;
+    if (partnerCode && !shop.commission_credited && !isTopup) {
+      const commission = targetPlan === 'premium' ? 150 : 100;
 
       try {
         const { data: partner } = await supabase
           .from('partners')
           .select('id, wallet_balance, total_earned')
-          .eq('referral_code', shop.referred_by_code.trim().toUpperCase())
+          .eq('referral_code', String(partnerCode).trim().toUpperCase())
           .maybeSingle();
 
         if (partner) {
@@ -318,7 +311,7 @@ export default function AdminSuperDashboard() {
     alert(
       isTopup
         ? `✓ Top-up Approved! +${topupPages} pages added to "${shop.business_name || shop.name}".`
-        : `✓ Plan Approved! ₹${expectedAmount} confirmed for "${shop.business_name || shop.name}".`
+        : `✓ Plan Approved! +28 Days added & ₹${expectedAmount} confirmed for "${shop.business_name || shop.name}".`
     );
   };
 
@@ -516,7 +509,7 @@ export default function AdminSuperDashboard() {
 
   shops.forEach((s) => {
     const p = (s.plan_type || 'trial').toLowerCase();
-    const hasDiscount = Boolean(s.referred_by_code || s.pending_promo_code);
+    const hasDiscount = Boolean(s.referred_by_code || s.referred_by || s.pending_promo_code);
     const actualPaid = Number(s.paid_amount || s.subscription_paid_amount || (hasDiscount ? (p === 'premium' ? 199 : 119) : 0));
     const cost = actualPaid > 0 ? actualPaid : getShopPlanCost(p, s.billing_cycle, hasDiscount);
 
@@ -565,7 +558,7 @@ export default function AdminSuperDashboard() {
     }
   });
 
-  const totalShopsAddedByAgents = shops.filter((s) => Boolean(s.referred_by_code)).length;
+  const totalShopsAddedByAgents = shops.filter((s) => Boolean(s.referred_by_code || s.referred_by)).length;
 
   const filteredShops = shops.filter(
     (s) =>
@@ -574,6 +567,7 @@ export default function AdminSuperDashboard() {
       s.phone?.includes(searchQuery) ||
       s.payment_utr?.includes(searchQuery) ||
       s.referred_by_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.referred_by?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.pending_promo_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.applied_promo_code?.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -586,6 +580,7 @@ export default function AdminSuperDashboard() {
       p.referral_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.upi_id?.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
   return (
     <div className="min-h-screen bg-[#060813] text-slate-200 font-sans p-6 sm:p-8 space-y-6">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -707,13 +702,14 @@ export default function AdminSuperDashboard() {
               {pendingUtrShops.map((ps) => {
                 const isTopup = ps.pending_action_type === 'quota_topup';
                 const topupPages = ps.pending_action_pages || 100;
-                const isPrem = String(ps.plan_type).toLowerCase() === 'premium';
+                const targetPlan = (ps.pending_action_plan || ps.plan_type || 'standard').toLowerCase();
+                const isPrem = targetPlan === 'premium';
                 
                 // Original Plan Price
                 const baseCatalogPrice = isTopup ? 50 : (isPrem ? 249 : 149);
 
                 // Priority: Any referral or promo code triggers FLAT 20% OFF
-                const appliedPromo = ps.referred_by_code || ps.pending_promo_code || ps.applied_promo_code;
+                const appliedPromo = ps.referred_by_code || ps.referred_by || ps.pending_promo_code || ps.applied_promo_code;
                 const hasDiscount = Boolean(appliedPromo && String(appliedPromo).trim() !== '');
 
                 // Calculate actual paid price: 149 -> 119, 249 -> 199
@@ -748,7 +744,7 @@ export default function AdminSuperDashboard() {
                             ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
                             : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
                         }`}>
-                          {isTopup ? 'QUOTA TOP-UP' : (ps.plan_type || 'STANDARD').toUpperCase()}
+                          {isTopup ? 'QUOTA TOP-UP' : targetPlan.toUpperCase()}
                         </span>
                         
                         <div className="flex items-center justify-end gap-1.5 pt-0.5">
@@ -802,7 +798,7 @@ export default function AdminSuperDashboard() {
                         onClick={() => handleApproveUtr(ps)}
                         className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] rounded-lg transition-all shadow cursor-pointer"
                       >
-                        {isTopup ? `✓ Approve (+${topupPages} Pgs)` : `✓ Approve (₹${actualPaidPrice})`}
+                        {isTopup ? `✓ Approve (+${topupPages} Pgs)` : `✓ Approve (+28 Days)`}
                       </button>
                       <button
                         onClick={() => handleRejectUtr(ps)}
@@ -1090,9 +1086,9 @@ export default function AdminSuperDashboard() {
                           </td>
 
                           <td className="p-3.5">
-                            {s.referred_by_code ? (
+                            {s.referred_by_code || s.referred_by ? (
                               <span className="font-mono text-xs font-bold text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded block w-fit">
-                                {s.referred_by_code}
+                                {s.referred_by_code || s.referred_by}
                               </span>
                             ) : (
                               <span className="text-slate-600 text-[11px]">Direct Organic</span>
@@ -1250,7 +1246,7 @@ export default function AdminSuperDashboard() {
                     <tbody className="divide-y divide-slate-800/80">
                       {filteredPartners.map((p) => {
                         const referredCount = shops.filter(
-                          (s) => s.referred_by_code === p.referral_code
+                          (s) => (s.referred_by_code === p.referral_code || s.referred_by === p.referral_code)
                         ).length;
 
                         return (

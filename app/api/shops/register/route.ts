@@ -30,7 +30,7 @@ async function sendWelcomeEmail(shop: {
 
     const recipientName = shop.ownerName || shop.businessName || 'Merchant';
 
-    const plainText = `Hi ${recipientName},\n\nYour ScanToPrint account for "${shop.businessName}" is now active.\n\nAccount Overview:\n- Shop Name: ${shop.businessName}\n- Active Plan: ${planLabel}\n- Counter Login: https://scantoprint.in/login\n\nHow ScanToPrint transforms your print desk:\n- Saves 15-20 minutes every hour: Customer files queue directly to your printer without manual transfers.\n- 100% WhatsApp Clutter Free: Customers scan your unique counter QR code to send documents directly.\n- Direct Payments: All printing charges deposit straight into your linked UPI account.\n- Private & Secure: Customer files auto-delete immediately after printing.\n\nWe are here to help you get started:\nNeed help setting up your desktop spooler or printer settings? Reply directly to this email or ping our support desk. We are always on standby to assist you.\n\nBest regards,\nScanToPrint Support Team\n${senderEmail}`;
+    const plainText = `Hi ${recipientName},\n\nYour ScanToPrint account for "${shop.businessName}" is now active.\n\nAccount Overview:\nShop Name: ${shop.businessName}\nActive Plan: ${planLabel}\nCounter Login: https://scantoprint.in/login\n\nHow ScanToPrint transforms your print desk:\nSaves 15-20 minutes every hour: Customer files queue directly to your printer without manual transfers.\n100% WhatsApp Clutter Free: Customers scan your unique counter QR code to send documents directly.\nDirect Payments: All printing charges deposit straight into your linked UPI account.\nPrivate & Secure: Customer files auto-delete immediately after printing.\n\nWe are here to help you get started:\nNeed help setting up your desktop spooler or printer settings? Reply directly to this email or ping our support desk. We are always on standby to assist you.\n\nBest regards,\nScanToPrint Support Team\n${senderEmail}`;
 
     const htmlContent = `
       <!DOCTYPE html>
@@ -158,6 +158,7 @@ export async function POST(req: Request) {
           page_limit: pageLimit,
           monthly_pages_printed: 0,
           referred_by_code: cleanReferralCode,
+          referred_by: cleanReferralCode,
           commission_credited: false,
         },
       ])
